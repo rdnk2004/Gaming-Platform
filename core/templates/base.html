@@ -1,0 +1,69 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hyper Snake{% endblock %}</title>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Inter:wght@400;600&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#00f260',
+                        secondary: '#0575e6',
+                        dark: '#0f172a',
+                        'dark-lighter': '#1e293b'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Rajdhani', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom CSS (Bubbles & Overrides) -->
+    <link rel="stylesheet" href="{% static 'css/bubbles.css' %}">
+    <style>
+        body {
+            background-color: #000;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body class="min-h-screen text-slate-200 selection:bg-primary selection:text-black">
+
+    <!-- Global Bubbles -->
+    <div id="bubble-container"></div>
+
+    <!-- Content -->
+    <div class="relative z-10">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Scripts -->
+    <script src="{% static 'js/bubbles.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>
