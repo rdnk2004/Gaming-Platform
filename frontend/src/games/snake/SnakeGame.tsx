@@ -63,12 +63,13 @@ class Particle {
 
 // Food class
 class Food {
-    x: number; y: number; pulse: number; color: string
+    x: number = 0
+    y: number = 0
+    pulse: number = 0
+    color: string = CONFIG.colors.food
 
     constructor(width: number, height: number) {
         this.respawn(width, height)
-        this.pulse = 0
-        this.color = CONFIG.colors.food
     }
 
     respawn(width: number, height: number) {

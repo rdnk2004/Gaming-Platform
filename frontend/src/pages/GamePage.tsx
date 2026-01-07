@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import SnakeGame from '../games/snake/SnakeGame'
 import TetrisGame from '../games/tetris/TetrisGame'
+import PongGame from '../games/pong/PongGame'
 
 export default function GamePage() {
   const { slug } = useParams<{ slug: string }>()
@@ -11,6 +12,8 @@ export default function GamePage() {
         return <SnakeGame />
       case 'tetris':
         return <TetrisGame />
+      case 'pong':
+        return <PongGame />
       default:
         return (
           <div className="game-not-found">

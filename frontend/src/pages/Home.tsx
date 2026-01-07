@@ -24,8 +24,7 @@ const games = [
     slug: 'pong',
     description: '1v1 neon battles',
     isMultiplayer: true,
-    icon: '🏓',
-    comingSoon: true
+    icon: '🏓'
   }
 ]
 
@@ -67,29 +66,17 @@ export default function Home() {
         >
           {games.map((game) => (
             <motion.div key={game.id} variants={item}>
-              {game.comingSoon ? (
-                <div className="game-card game-card--disabled">
-                  <div className="game-card-placeholder">
-                    <span className="game-icon">{game.icon}</span>
-                  </div>
-                  <div className="game-card-overlay">
-                    <h3 className="game-card-title">{game.name}</h3>
-                    <span className="coming-soon-badge">Coming Soon</span>
-                  </div>
+              <Link to={`/game/${game.slug}`} className="game-card">
+                <div className="game-card-placeholder">
+                  <span className="game-icon">{game.icon}</span>
                 </div>
-              ) : (
-                <Link to={`/game/${game.slug}`} className="game-card">
-                  <div className="game-card-placeholder">
-                    <span className="game-icon">{game.icon}</span>
-                  </div>
-                  <div className="game-card-overlay">
-                    <h3 className="game-card-title">{game.name}</h3>
-                    <p className="game-card-meta">
-                      {game.isMultiplayer ? '🎮 Multiplayer' : '🕹️ Single Player'}
-                    </p>
-                  </div>
-                </Link>
-              )}
+                <div className="game-card-overlay">
+                  <h3 className="game-card-title">{game.name}</h3>
+                  <p className="game-card-meta">
+                    {game.isMultiplayer ? '🎮 Multiplayer' : '🕹️ Single Player'}
+                  </p>
+                </div>
+              </Link>
             </motion.div>
           ))}
         </motion.div>
