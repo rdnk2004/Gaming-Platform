@@ -16,8 +16,7 @@ const games = [
     slug: 'tetris',
     description: 'Stack blocks cyberpunk style',
     isMultiplayer: false,
-    icon: '🧱',
-    comingSoon: true
+    icon: '🧱'
   },
   {
     id: 3,

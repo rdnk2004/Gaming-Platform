@@ -15,8 +15,8 @@ export default function Layout() {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                <h1 className="brand-title">Hyper Snake</h1>
-                <span className="brand-subtitle">ARENA EVOLVED</span>
+                <h1 className="brand-title">Cyberarcade</h1>
+                <span className="brand-subtitle">RETRO REIMAGINED</span>
               </motion.div>
             </Link>
 

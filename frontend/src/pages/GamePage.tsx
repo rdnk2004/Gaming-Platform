@@ -1,28 +1,31 @@
 import { useParams } from 'react-router-dom'
 import SnakeGame from '../games/snake/SnakeGame'
+import TetrisGame from '../games/tetris/TetrisGame'
 
 export default function GamePage() {
-    const { slug } = useParams<{ slug: string }>()
+  const { slug } = useParams<{ slug: string }>()
 
-    const renderGame = () => {
-        switch (slug) {
-            case 'snake':
-                return <SnakeGame />
-            default:
-                return (
-                    <div className="game-not-found">
-                        <h2>Game Not Found</h2>
-                        <p>The game you're looking for doesn't exist yet.</p>
-                    </div>
-                )
-        }
+  const renderGame = () => {
+    switch (slug) {
+      case 'snake':
+        return <SnakeGame />
+      case 'tetris':
+        return <TetrisGame />
+      default:
+        return (
+          <div className="game-not-found">
+            <h2>Game Not Found</h2>
+            <p>The game you're looking for doesn't exist yet.</p>
+          </div>
+        )
     }
+  }
 
-    return (
-        <div className="game-page container">
-            {renderGame()}
+  return (
+    <div className="game-page container">
+      {renderGame()}
 
-            <style>{`
+      <style>{`
         .game-page {
           display: flex;
           flex-direction: column;
@@ -42,6 +45,6 @@ export default function GamePage() {
           color: var(--text-secondary);
         }
       `}</style>
-        </div>
-    )
+    </div>
+  )
 }
