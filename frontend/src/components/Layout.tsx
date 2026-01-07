@@ -3,82 +3,100 @@ import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/authStore'
 
 export default function Layout() {
-    const { user, logout } = useAuthStore()
+  const { user, logout } = useAuthStore()
 
-    return (
-        <div className="layout">
-            <header className="header">
-                <div className="container">
-                    <nav className="nav">
-                        <Link to="/" className="logo">
-                            <motion.span
-                                initial={{ opacity: 0, y: -20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="logo-text"
-                            >
-                                CYBER<span className="text-magenta">ARCADE</span>
-                            </motion.span>
-                        </Link>
+  return (
+    <div className="layout">
+      <header className="header">
+        <div className="container">
+          <nav className="nav">
+            <Link to="/" className="brand">
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <h1 className="brand-title">Hyper Snake</h1>
+                <span className="brand-subtitle">ARENA EVOLVED</span>
+              </motion.div>
+            </Link>
 
-                        <div className="nav-links">
-                            <Link to="/">Games</Link>
-                            <Link to="/leaderboard">Leaderboard</Link>
-                            {user ? (
-                                <>
-                                    <span className="user-info">
-                                        <span className="text-cyan">{user.username}</span>
-                                        <span className="user-level">LVL {user.level}</span>
-                                    </span>
-                                    <button onClick={logout} className="btn btn-secondary">
-                                        Logout
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    <Link to="/login" className="btn btn-secondary">Login</Link>
-                                    <Link to="/register" className="btn btn-primary">Sign Up</Link>
-                                </>
-                            )}
-                        </div>
-                    </nav>
-                </div>
-            </header>
+            <div className="nav-links">
+              <Link to="/">Games</Link>
+              <Link to="/leaderboard">Leaderboard</Link>
+              {user ? (
+                <>
+                  <span className="user-info">
+                    <span className="text-primary">{user.username}</span>
+                    <span className="user-level">LVL {user.level}</span>
+                  </span>
+                  <button onClick={logout} className="btn btn-secondary">
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" className="btn btn-secondary">Login</Link>
+                  <Link to="/register" className="btn btn-primary">Sign Up</Link>
+                </>
+              )}
+            </div>
+          </nav>
+        </div>
+      </header>
 
-            <main className="main">
-                <Outlet />
-            </main>
+      <main className="main">
+        <Outlet />
+      </main>
 
-            <footer className="footer">
-                <div className="container text-center">
-                    <p className="text-muted">
-                        © 2026 CYBERARCADE • Retro games with a cyberpunk twist
-                    </p>
-                </div>
-            </footer>
+      <footer className="footer">
+        <div className="container text-center">
+          <p className="footer-hint">
+            Avoid walls • Eat glowing orbs • Don't hit yourself
+          </p>
+        </div>
+      </footer>
 
-            <style>{`
+      <style>{`
         .header {
           position: sticky;
           top: 0;
           z-index: 100;
-          background: rgba(10, 10, 15, 0.9);
-          backdrop-filter: blur(10px);
-          border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+          background: var(--glass);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-bottom: 1px solid var(--glass-border);
           padding: var(--space-md) 0;
         }
         
         .nav {
           display: flex;
           justify-content: space-between;
-          align-items: center;
+          align-items: flex-start;
         }
         
-        .logo-text {
+        .brand {
+          text-decoration: none;
+        }
+        
+        .brand-title {
+          margin: 0;
           font-family: var(--font-display);
-          font-size: 1.5rem;
-          font-weight: 900;
-          color: var(--neon-cyan);
-          letter-spacing: 0.1em;
+          font-weight: 700;
+          font-size: 32px;
+          text-transform: uppercase;
+          letter-spacing: 2px;
+          background: linear-gradient(90deg, #00f260, #0575e6);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          filter: drop-shadow(0 0 15px rgba(0, 242, 96, 0.4));
+        }
+        
+        .brand-subtitle {
+          font-size: 12px;
+          color: #64748b;
+          letter-spacing: 1px;
+          font-weight: 600;
         }
         
         .nav-links {
@@ -91,7 +109,13 @@ export default function Layout() {
           font-family: var(--font-display);
           font-size: 0.875rem;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
+          letter-spacing: 1px;
+          color: var(--text-secondary);
+          transition: var(--transition-fast);
+        }
+        
+        .nav-links a:not(.btn):hover {
+          color: var(--primary);
         }
         
         .user-info {
@@ -101,8 +125,8 @@ export default function Layout() {
         }
         
         .user-level {
-          background: var(--gradient-neon);
-          color: var(--bg-primary);
+          background: var(--gradient-primary);
+          color: #000;
           padding: 2px 8px;
           border-radius: var(--radius-sm);
           font-size: 0.75rem;
@@ -116,7 +140,12 @@ export default function Layout() {
         
         .footer {
           padding: var(--space-xl) 0;
-          border-top: 1px solid rgba(0, 255, 255, 0.1);
+          border-top: 1px solid var(--glass-border);
+        }
+        
+        .footer-hint {
+          font-size: 12px;
+          color: #475569;
         }
         
         @media (max-width: 768px) {
@@ -126,8 +155,11 @@ export default function Layout() {
           .nav-links a:not(.btn) {
             display: none;
           }
+          .brand-title {
+            font-size: 24px;
+          }
         }
       `}</style>
-        </div>
-    )
+    </div>
+  )
 }
