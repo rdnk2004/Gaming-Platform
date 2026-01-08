@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * HYPER SNAKE ENGINE - Complete Replica of snake_pg.html
@@ -184,14 +184,15 @@ class Snake {
     width: number
     effects: { speed: number; ghost: number }
 
-    constructor(id: number, startX: number, startY: number, colorProfile: ColorProfile, controlScheme: 'arrows' | 'wasd') {
+    constructor(id: number, startX: number, startY: number, colorProfile: ColorProfile, controlScheme: 'arrows' | 'wasd', initialAngle?: number) {
         this.id = id
         this.alive = true
         this.score = 0
         this.orbsEaten = 0
         this.color = colorProfile
         this.controls = controlScheme
-        this.angle = controlScheme === 'arrows' ? Math.PI : 0
+        // Use provided angle or default based on controls
+        this.angle = initialAngle !== undefined ? initialAngle : (controlScheme === 'arrows' ? Math.PI : 0)
         this.targetAngle = this.angle
         this.speed = CONFIG.baseSpeed
         this.head = { x: startX, y: startY }
@@ -424,6 +425,20 @@ export default function SnakeGame() {
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [achievement, setAchievement] = useState<{ title: string; icon: string } | null>(null)
 
+    // Use refs for values needed in game loop to avoid stale closures
+    const modeRef = useRef(mode)
+    const wallsEnabledRef = useRef(wallsEnabled)
+    const lightModeRef = useRef(lightMode)
+    const highScoreRef = useRef(highScore)
+    const gameStateRef = useRef(gameState)
+
+    // Keep refs in sync with state
+    useEffect(() => { modeRef.current = mode }, [mode])
+    useEffect(() => { wallsEnabledRef.current = wallsEnabled }, [wallsEnabled])
+    useEffect(() => { lightModeRef.current = lightMode }, [lightMode])
+    useEffect(() => { highScoreRef.current = highScore }, [highScore])
+    useEffect(() => { gameStateRef.current = gameState }, [gameState])
+
     // Game state stored in ref to avoid re-renders
     const gameRef = useRef<{
         snakes: Snake[]
@@ -438,6 +453,7 @@ export default function SnakeGame() {
         width: number
         height: number
         unlockedAchievements: Set<string>
+        running: boolean
     }>({
         snakes: [],
         food: null,
@@ -450,10 +466,11 @@ export default function SnakeGame() {
         gameStartTime: 0,
         width: 0,
         height: 0,
-        unlockedAchievements: new Set(JSON.parse(localStorage.getItem('snakeAchievements') || '[]'))
+        unlockedAchievements: new Set(JSON.parse(localStorage.getItem('snakeAchievements') || '[]')),
+        running: false
     })
 
-    const unlockAchievement = useCallback((id: string) => {
+    const unlockAchievement = (id: string) => {
         const game = gameRef.current
         if (game.unlockedAchievements.has(id)) return
         game.unlockedAchievements.add(id)
@@ -463,17 +480,17 @@ export default function SnakeGame() {
             setAchievement({ title: ach.title, icon: ach.icon })
             setTimeout(() => setAchievement(null), 3000)
         }
-    }, [])
+    }
 
-    const createExplosion = useCallback((x: number, y: number, color: string, count: number) => {
+    const createExplosion = (x: number, y: number, color: string, count: number) => {
         const game = gameRef.current
         for (let i = 0; i < count; i++) {
             game.particles.push(new Particle(x, y, color))
         }
-    }, [])
+    }
 
     // Draw grid with parallax
-    const drawGrid = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, time: number, isLight: boolean) => {
+    const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number, time: number, isLight: boolean) => {
         ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.05)' : CONFIG.colors.grid
         ctx.lineWidth = 1
         const gridSize = 40
@@ -487,28 +504,41 @@ export default function SnakeGame() {
             ctx.moveTo(0, y); ctx.lineTo(width, y)
         }
         ctx.stroke()
-    }, [])
+    }
 
-    // Main game loop
-    const gameLoop = useCallback((timestamp: number) => {
+    // Main game loop - defined as a regular function, uses refs
+    const gameLoop = (timestamp: number) => {
+        const game = gameRef.current
+
+        // Stop if game is no longer running
+        if (!game.running) return
+
         const canvas = canvasRef.current
-        if (!canvas) return
+        if (!canvas) {
+            game.animationId = requestAnimationFrame(gameLoop)
+            return
+        }
 
         const ctx = canvas.getContext('2d', { alpha: false })
-        if (!ctx) return
+        if (!ctx) {
+            game.animationId = requestAnimationFrame(gameLoop)
+            return
+        }
 
-        const game = gameRef.current
         const dt = Math.min(timestamp - game.lastTime, 100)
         game.lastTime = timestamp
 
         const { width, height } = game
+        const isLightMode = lightModeRef.current
+        const currentMode = modeRef.current
+        const currentWallsEnabled = wallsEnabledRef.current
 
         // Clear canvas
-        ctx.fillStyle = lightMode ? '#f1f5f9' : '#050505'
+        ctx.fillStyle = isLightMode ? '#f1f5f9' : '#050505'
         ctx.fillRect(0, 0, width, height)
 
         // Draw grid
-        drawGrid(ctx, width, height, timestamp, lightMode)
+        drawGrid(ctx, width, height, timestamp, isLightMode)
 
         // Draw and update food
         if (game.food) {
@@ -518,8 +548,8 @@ export default function SnakeGame() {
 
         // Update and draw snakes
         game.snakes.forEach((snake, idx) => {
-            const enemy = mode === 2 ? game.snakes[idx === 0 ? 1 : 0] : undefined
-            const died = snake.update(dt, game.keys, width, height, wallsEnabled, enemy)
+            const enemy = currentMode === 2 ? game.snakes[idx === 0 ? 1 : 0] : undefined
+            const died = snake.update(dt, game.keys, width, height, currentWallsEnabled, enemy)
             if (died) {
                 createExplosion(snake.head.x, snake.head.y, snake.color.main, 20)
             }
@@ -594,15 +624,17 @@ export default function SnakeGame() {
 
         // Game over check
         if (game.snakes.every(s => !s.alive)) {
+            game.running = false
             let msg = ''
-            if (mode === 1) {
+            if (currentMode === 1) {
                 const score = game.snakes[0]?.score || 0
-                if (score > highScore) {
+                const currentHighScore = highScoreRef.current
+                if (score > currentHighScore) {
                     setHighScore(score)
                     localStorage.setItem('snakeHighScore', score.toString())
                     msg = `Score: ${score} (New High Score!)`
                 } else {
-                    msg = `Score: ${score} (High Score: ${highScore})`
+                    msg = `Score: ${score} (High Score: ${currentHighScore})`
                 }
             } else {
                 const s1 = game.snakes[0]?.score || 0
@@ -617,9 +649,9 @@ export default function SnakeGame() {
         }
 
         game.animationId = requestAnimationFrame(gameLoop)
-    }, [createExplosion, unlockAchievement, highScore, lightMode, mode, wallsEnabled, drawGrid])
+    }
 
-    const startGame = useCallback(() => {
+    const startGame = () => {
         const canvas = canvasRef.current
         const container = containerRef.current
         if (!canvas || !container) return
@@ -647,15 +679,15 @@ export default function SnakeGame() {
         game.bigBubbles = []
         game.powerUps = []
 
-        // Player 1 (right side, facing left)
-        game.snakes.push(new Snake(1, width * 0.75, height / 2, CONFIG.colors.p1, 'arrows'))
-
-        // Player 2 (left side, facing right)
-        if (mode === 2) {
-            const snake2 = new Snake(2, width * 0.25, height / 2, CONFIG.colors.p2, 'wasd')
-            snake2.angle = 0
-            snake2.targetAngle = 0
-            game.snakes.push(snake2)
+        // Player 1 (center, facing right for 1P, or on left for 2P)
+        if (modeRef.current === 1) {
+            // Single player - start in center facing right (angle = 0)
+            game.snakes.push(new Snake(1, width * 0.5, height / 2, CONFIG.colors.p1, 'arrows', 0))
+        } else {
+            // 2 Player mode - P1 on left facing right (angle = 0)
+            game.snakes.push(new Snake(1, width * 0.25, height / 2, CONFIG.colors.p1, 'arrows', 0))
+            // P2 on right facing left (angle = Math.PI)
+            game.snakes.push(new Snake(2, width * 0.75, height / 2, CONFIG.colors.p2, 'wasd', Math.PI))
         }
 
         // Food
@@ -663,13 +695,14 @@ export default function SnakeGame() {
 
         game.lastTime = performance.now()
         game.gameStartTime = game.lastTime
+        game.running = true
 
         setScores({ p1: 0, p2: 0 })
         setGameState('playing')
         game.animationId = requestAnimationFrame(gameLoop)
-    }, [gameLoop, mode])
+    }
 
-    const toggleFullscreen = useCallback(() => {
+    const toggleFullscreen = () => {
         const container = containerRef.current
         if (!container) return
         if (!document.fullscreenElement) {
@@ -677,7 +710,7 @@ export default function SnakeGame() {
         } else {
             document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { })
         }
-    }, [])
+    }
 
     // Keyboard handlers
     useEffect(() => {
@@ -686,7 +719,8 @@ export default function SnakeGame() {
             if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(e.key.toLowerCase())) {
                 e.preventDefault()
             }
-            if (e.key === 'Escape' && gameState === 'playing') {
+            if (e.key === 'Escape' && gameStateRef.current === 'playing') {
+                gameRef.current.running = false
                 cancelAnimationFrame(gameRef.current.animationId)
                 setGameState('menu')
             }
@@ -699,9 +733,10 @@ export default function SnakeGame() {
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
             window.removeEventListener('keyup', handleKeyUp)
+            gameRef.current.running = false
             cancelAnimationFrame(gameRef.current.animationId)
         }
-    }, [gameState])
+    }, [])
 
     // Fullscreen listener
     useEffect(() => {
