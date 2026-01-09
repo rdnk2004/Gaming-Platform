@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * CYBER TETRIS ULTRA - Cyberarcade Edition
- * Enhanced Tetris with crazy cyberpunk features:
- * - Larger board (12x24)
- * - Black blocks with neon outlines
- * - Combo system with multipliers
- * - Screen shake & glitch effects
- * - Color-shifting rainbow mode
- * - Power-up system
- * - Speed zones
+ * CYBER TETRIS - Cyberarcade Edition
+ * Two modes:
+ * - Classic: Standard 10x20 board
+ * - Ultra: Enhanced 12x24 board with combo system, screen shake, glitch effects
  */
 
 // Standard 7 Tetromino shapes with neon outline colors
@@ -24,11 +19,18 @@ const TETROMINOES: Record<string, { shape: number[][], color: string }> = {
 }
 
 type TetrominoType = keyof typeof TETROMINOES
+type Edition = 'classic' | 'ultra'
 
-// EXPANDED BOARD SIZE
-const BOARD_WIDTH = 12
-const BOARD_HEIGHT = 24
-const CELL_SIZE = 26
+// Edition configurations
+const EDITION_CONFIG = {
+    classic: { width: 10, height: 20, cellSize: 28 },
+    ultra: { width: 12, height: 24, cellSize: 24 }
+}
+
+// Mutable board config - set when game starts based on edition
+let BOARD_WIDTH = 10
+let BOARD_HEIGHT = 20
+let CELL_SIZE = 28
 
 // Create empty board - now stores color string
 const createBoard = (): (string | null)[][] =>
@@ -101,11 +103,16 @@ interface Particle {
 export default function TetrisGame() {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [gameState, setGameState] = useState<'menu' | 'playing' | 'paused' | 'gameover'>('menu')
+    const [edition, setEdition] = useState<Edition>('classic')
     const [score, setScore] = useState(0)
     const [level, setLevel] = useState(1)
     const [lines, setLines] = useState(0)
     const [combo, setCombo] = useState(0)
     const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('tetrisHighScore') || '0'))
+
+    // Edition-dependent config refs
+    const editionRef = useRef(edition)
+    useEffect(() => { editionRef.current = edition }, [edition])
 
     // Refs for game state
     const gameStateRef = useRef(gameState)
@@ -848,6 +855,12 @@ export default function TetrisGame() {
         const canvas = canvasRef.current
         if (!canvas) return
 
+        // Set board dimensions based on selected edition
+        const config = EDITION_CONFIG[editionRef.current]
+        BOARD_WIDTH = config.width
+        BOARD_HEIGHT = config.height
+        CELL_SIZE = config.cellSize
+
         canvas.width = BOARD_WIDTH * CELL_SIZE + 200
         canvas.height = BOARD_HEIGHT * CELL_SIZE
 
@@ -941,7 +954,7 @@ export default function TetrisGame() {
             <div className="game-wrapper">
                 <div className="game-brand">
                     <h1>CYBER TETRIS</h1>
-                    <span>ULTRA EDITION</span>
+                    <span>{edition === 'ultra' ? 'ULTRA EDITION' : 'CLASSIC EDITION'}</span>
                 </div>
 
                 <canvas ref={canvasRef} className="game-canvas" />
@@ -950,12 +963,36 @@ export default function TetrisGame() {
                 {gameState === 'menu' && (
                     <div className="overlay">
                         <h2>CYBER TETRIS</h2>
-                        <div className="subtitle">ULTRA EDITION</div>
+                        <div className="edition-select">
+                            <button
+                                className={`edition-btn ${edition === 'classic' ? 'active' : ''}`}
+                                onClick={() => setEdition('classic')}
+                            >
+                                CLASSIC
+                            </button>
+                            <button
+                                className={`edition-btn ${edition === 'ultra' ? 'active' : ''}`}
+                                onClick={() => setEdition('ultra')}
+                            >
+                                ULTRA
+                            </button>
+                        </div>
+                        <div className="subtitle">{edition === 'ultra' ? 'Enhanced Mode' : 'Standard 10x20'}</div>
                         <div className="features">
-                            <span>🎮 12x24 Board</span>
-                            <span>⚡ Combo System</span>
-                            <span>💥 Screen Shake</span>
-                            <span>🌈 Glitch FX</span>
+                            {edition === 'ultra' ? (
+                                <>
+                                    <span>🎮 12x24 Board</span>
+                                    <span>⚡ Combo System</span>
+                                    <span>💥 Screen Shake</span>
+                                    <span>🌈 Glitch FX</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>🎮 10x20 Board</span>
+                                    <span>📊 Classic Scoring</span>
+                                    <span>🎯 Pure Gameplay</span>
+                                </>
+                            )}
                         </div>
                         <div className="controls-grid">
                             <div className="control-row"><span className="k-box">← →</span><span>Move</span></div>
@@ -963,7 +1000,7 @@ export default function TetrisGame() {
                             <div className="control-row"><span className="k-box">↓</span><span>Soft Drop</span></div>
                             <div className="control-row"><span className="k-box">Space</span><span>Hard Drop</span></div>
                             <div className="control-row"><span className="k-box">C</span><span>Hold</span></div>
-                            <div className="control-row"><span className="k-box">G</span><span>Color Shift</span></div>
+                            <div className="control-row"><span className="k-box">P / Esc</span><span>Pause</span></div>
                         </div>
                         <button className="btn-start" onClick={startGame}>DEPLOY BLOCKS</button>
                     </div>
@@ -1005,9 +1042,10 @@ export default function TetrisGame() {
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    min-height: 100vh;
+                    height: 100vh;
+                    width: 100vw;
+                    overflow: hidden;
                     background: radial-gradient(ellipse at 50% 0%, #1a1a2e 0%, #000 70%);
-                    padding: 20px;
                 }
 
                 .game-wrapper {
@@ -1054,17 +1092,51 @@ export default function TetrisGame() {
                 .overlay {
                     position: absolute;
                     top: 50%;
-                    left: calc(50% - 40px);
+                    left: 50%;
                     transform: translate(-50%, -50%);
                     background: rgba(5, 5, 15, 0.97);
                     border: 2px solid rgba(0, 242, 96, 0.4);
                     backdrop-filter: blur(20px);
-                    padding: 35px 45px;
+                    padding: 30px 40px;
                     border-radius: 20px;
                     text-align: center;
-                    min-width: 340px;
+                    min-width: 360px;
                     z-index: 100;
                     box-shadow: 0 0 60px rgba(0, 242, 96, 0.2);
+                }
+
+                .edition-select {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: center;
+                    margin: 15px 0;
+                }
+
+                .edition-btn {
+                    background: transparent;
+                    border: 2px solid #334155;
+                    color: #64748b;
+                    padding: 10px 25px;
+                    border-radius: 25px;
+                    cursor: pointer;
+                    font-weight: 700;
+                    font-family: 'Rajdhani', sans-serif;
+                    font-size: 14px;
+                    text-transform: uppercase;
+                    letter-spacing: 2px;
+                    transition: all 0.2s;
+                }
+
+                .edition-btn:hover {
+                    border-color: #00f260;
+                    color: #00f260;
+                }
+
+                .edition-btn.active {
+                    background: linear-gradient(135deg, rgba(0, 242, 96, 0.2), rgba(5, 117, 230, 0.2));
+                    border-color: #00f260;
+                    color: #00f260;
+                    box-shadow: 0 0 15px rgba(0, 242, 96, 0.3);
                 }
 
                 .overlay.gameover {

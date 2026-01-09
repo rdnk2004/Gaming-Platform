@@ -25,7 +25,7 @@ export default function GamePage() {
   }
 
   return (
-    <div className="game-page container">
+    <div className="game-page">
       {renderGame()}
 
       <style>{`
@@ -33,6 +33,13 @@ export default function GamePage() {
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
+          height: 100vh;
+          width: 100vw;
+          overflow: hidden;
+          position: fixed;
+          top: 0;
+          left: 0;
         }
         
         .game-not-found {
