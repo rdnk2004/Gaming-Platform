@@ -835,9 +835,12 @@ export default function SnakeGame() {
         .snake-game-container {
           position: relative;
           width: 100%;
-          height: 100vh;
+          height: calc(100vh - 200px);
+          min-height: 600px;
           background: radial-gradient(circle at 50% 50%, #1e293b 0%, #000 100%);
           overflow: hidden;
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--glass-border);
         }
         .snake-game-container.light-mode {
           background: radial-gradient(circle at 50% 50%, #e2e8f0 0%, #cbd5e1 100%);
@@ -848,6 +851,7 @@ export default function SnakeGame() {
           left: 0;
           width: 100%;
           height: 100%;
+          border-radius: var(--radius-lg);
         }
         .game-brand {
           position: absolute;
