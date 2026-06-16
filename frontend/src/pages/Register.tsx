@@ -39,22 +39,24 @@ export default function Register() {
         <div className="auth-page">
             <motion.div
                 className="auth-card card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
+                initial={{ opacity: 0, scale: 0.96, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
             >
-                <h1 className="auth-title">Sign Up</h1>
-                <p className="auth-subtitle">Join the cyber arcade</p>
+                <div className="auth-logo">🕹️</div>
+                <h2 className="auth-title">CREATE PROFILE</h2>
+                <p className="auth-subtitle">Initialize new arena profile</p>
 
                 {displayError && (
-                    <div className="error-message" onClick={() => { clearError(); setLocalError('') }}>
-                        {displayError}
+                    <div className="error-alert" onClick={() => { clearError(); setLocalError('') }}>
+                        <span className="error-icon">⚠️</span>
+                        <span className="error-text">{displayError}</span>
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit}>
                     <div className="input-group">
-                        <label htmlFor="username">Username</label>
+                        <label htmlFor="username">Mainframe Identity</label>
                         <input
                             id="username"
                             type="text"
@@ -68,7 +70,7 @@ export default function Register() {
                     </div>
 
                     <div className="input-group">
-                        <label htmlFor="email">Email</label>
+                        <label htmlFor="email">Comms Channel (Email)</label>
                         <input
                             id="email"
                             type="email"
@@ -82,7 +84,7 @@ export default function Register() {
                     </div>
 
                     <div className="input-group">
-                        <label htmlFor="password">Password</label>
+                        <label htmlFor="password">Security Code</label>
                         <input
                             id="password"
                             type="password"
@@ -96,7 +98,7 @@ export default function Register() {
                     </div>
 
                     <div className="input-group">
-                        <label htmlFor="confirmPassword">Confirm Password</label>
+                        <label htmlFor="confirmPassword">Verify Security Code</label>
                         <input
                             id="confirmPassword"
                             type="password"
@@ -114,12 +116,12 @@ export default function Register() {
                         className="btn btn-primary auth-btn"
                         disabled={isLoading}
                     >
-                        {isLoading ? 'Creating Account...' : 'Create Account'}
+                        {isLoading ? 'CONFIGURING MAIN DATA...' : 'REGISTER ACCOUNT'}
                     </button>
                 </form>
 
                 <p className="auth-footer">
-                    Already have an account? <Link to="/login">Login</Link>
+                    Mainframe profile exists? <Link to="/login" className="auth-link">Login</Link>
                 </p>
             </motion.div>
 
@@ -128,50 +130,96 @@ export default function Register() {
           display: flex;
           justify-content: center;
           align-items: center;
-          min-height: calc(100vh - 300px);
+          min-height: calc(100vh - 280px);
+          padding: var(--space-md);
         }
         
         .auth-card {
           width: 100%;
-          max-width: 400px;
+          max-width: 420px;
+          text-align: center;
+          background: rgba(12, 8, 26, 0.82);
+          border: 1px solid rgba(139, 92, 246, 0.22);
+          box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+          position: relative;
+        }
+
+        .auth-logo {
+          font-size: 3rem;
+          margin-bottom: var(--space-xs);
+          filter: drop-shadow(0 0 10px var(--primary-glow));
+          animation: logoFloat 4s ease-in-out infinite;
+        }
+
+        @keyframes logoFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
         }
         
         .auth-title {
-          text-align: center;
-          margin-bottom: var(--space-xs);
+          font-size: 24px;
+          letter-spacing: 4px;
+          margin-bottom: 2px;
+          background: linear-gradient(90deg, #fff, var(--secondary));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
         }
         
         .auth-subtitle {
-          text-align: center;
+          font-size: 13px;
           color: var(--text-secondary);
           margin-bottom: var(--space-xl);
+          letter-spacing: 1px;
         }
         
         .auth-btn {
           width: 100%;
           margin-top: var(--space-md);
-        }
-        
-        .auth-btn:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
+          padding: 14px;
+          font-size: 1rem;
         }
         
         .auth-footer {
           text-align: center;
           margin-top: var(--space-xl);
-          color: var(--text-secondary);
+          color: var(--text-muted);
+          font-size: 0.85rem;
+        }
+
+        .auth-link {
+          color: var(--secondary);
+          font-weight: 700;
+          text-decoration: none;
+          transition: var(--transition-fast);
+          margin-left: 4px;
+        }
+
+        .auth-link:hover {
+          color: var(--primary);
+          text-shadow: 0 0 8px var(--primary-glow);
         }
         
-        .error-message {
-          background: rgba(255, 0, 80, 0.1);
-          border: 1px solid var(--neon-pink);
-          color: var(--neon-pink);
-          padding: var(--space-md);
+        .error-alert {
+          background: rgba(255, 0, 85, 0.08);
+          border: 1px solid var(--accent);
+          color: var(--accent);
+          padding: 12px;
           border-radius: var(--radius-md);
           margin-bottom: var(--space-lg);
           cursor: pointer;
-          font-size: 0.875rem;
+          font-size: 0.85rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          text-shadow: 0 0 5px var(--accent-glow);
+          transition: all var(--transition-fast);
+        }
+
+        .error-alert:hover {
+          background: rgba(255, 0, 85, 0.15);
+          box-shadow: 0 0 10px rgba(255, 0, 85, 0.25);
         }
       `}</style>
         </div>

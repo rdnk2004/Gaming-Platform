@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAuthStore, API_URL } from '../../store/authStore'
 
 /**
  * HYPER SNAKE ENGINE - Complete Replica of snake_pg.html
@@ -635,6 +636,24 @@ export default function SnakeGame() {
                     msg = `Score: ${score} (New High Score!)`
                 } else {
                     msg = `Score: ${score} (High Score: ${currentHighScore})`
+                }
+
+                // Submit score to backend if logged in
+                const token = useAuthStore.getState().token
+                if (token) {
+                    const duration = Math.floor((timestamp - game.gameStartTime) / 1000)
+                    fetch(`${API_URL}/leaderboard/submit`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            game_slug: 'snake',
+                            score: score,
+                            duration_seconds: duration > 0 ? duration : 1
+                        })
+                    }).catch(err => console.error('Failed to submit score:', err))
                 }
             } else {
                 const s1 = game.snakes[0]?.score || 0

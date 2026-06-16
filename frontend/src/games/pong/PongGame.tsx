@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useAuthStore, API_URL } from '../../store/authStore'
 
 /**
  * CYBER PONG - Cyberarcade Edition
@@ -54,6 +55,24 @@ export default function PongGame() {
     const [mode, setMode] = useState<'1p' | '2p'>('2p')
     const [scores, setScores] = useState({ p1: 0, p2: 0 })
     const [winner, setWinner] = useState<string>('')
+    const [isFullscreen, setIsFullscreen] = useState(false)
+
+    const toggleFullscreen = () => {
+        const container = containerRef.current
+        if (!container) return
+        if (!document.fullscreenElement) {
+            container.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { })
+        } else {
+            document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { })
+        }
+    }
+
+    // Fullscreen change listener
+    useEffect(() => {
+        const handler = () => setIsFullscreen(!!document.fullscreenElement)
+        document.addEventListener('fullscreenchange', handler)
+        return () => document.removeEventListener('fullscreenchange', handler)
+    }, [])
 
     const gameRef = useRef<{
         ball: Ball
@@ -67,6 +86,7 @@ export default function PongGame() {
         height: number
         aiReactionTime: number
         aiTargetY: number
+        gameStartTime: number
     }>({
         ball: { x: 0, y: 0, vx: 0, vy: 0, speed: CONFIG.ballSpeed },
         p1: { x: 0, y: 0, score: 0 },
@@ -78,7 +98,8 @@ export default function PongGame() {
         width: 800,
         height: 500,
         aiReactionTime: 0,
-        aiTargetY: 250
+        aiTargetY: 250,
+        gameStartTime: 0
     })
 
     const createParticles = useCallback((x: number, y: number, color: string, count: number) => {
@@ -182,6 +203,26 @@ export default function PongGame() {
         ctx.lineWidth = 2
         ctx.strokeRect(1, 1, width - 2, height - 2)
     }, [])
+
+    const submitPongScore = useCallback((score: number) => {
+        if (mode !== '1p') return
+        const token = useAuthStore.getState().token
+        if (token) {
+            const duration = Math.floor((performance.now() - gameRef.current.gameStartTime) / 1000)
+            fetch(`${API_URL}/leaderboard/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    game_slug: 'pong',
+                    score: score,
+                    duration_seconds: duration > 0 ? duration : 1
+                })
+            }).catch(err => console.error('Failed to submit score:', err))
+        }
+    }, [mode])
 
     const gameLoop = useCallback((timestamp: number) => {
         const canvas = canvasRef.current
@@ -290,6 +331,7 @@ export default function PongGame() {
             if (game.p2.score >= CONFIG.winScore) {
                 setWinner(mode === '1p' ? 'CPU Wins!' : 'Player 2 Wins!')
                 setGameState('gameover')
+                submitPongScore(game.p1.score)
                 return
             }
             resetBall(1)
@@ -301,6 +343,7 @@ export default function PongGame() {
             if (game.p1.score >= CONFIG.winScore) {
                 setWinner('Player 1 Wins!')
                 setGameState('gameover')
+                submitPongScore(game.p1.score)
                 return
             }
             resetBall(-1)
@@ -318,7 +361,7 @@ export default function PongGame() {
 
         drawGame(ctx)
         game.animationId = requestAnimationFrame(gameLoop)
-    }, [mode, createParticles, resetBall, drawGame])
+    }, [mode, createParticles, resetBall, drawGame, submitPongScore])
 
     const startGame = useCallback(() => {
         const container = containerRef.current
@@ -343,6 +386,7 @@ export default function PongGame() {
         setScores({ p1: 0, p2: 0 })
         setGameState('playing')
         game.lastTime = performance.now()
+        game.gameStartTime = game.lastTime
         game.animationId = requestAnimationFrame(gameLoop)
     }, [resetBall, gameLoop])
 
@@ -423,6 +467,12 @@ export default function PongGame() {
                     </div>
 
                     <button className="btn-start" onClick={startGame}>START GAME</button>
+                    
+                    <div style={{ marginTop: '15px' }}>
+                        <button className="mode-btn" onClick={toggleFullscreen}>
+                            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -487,6 +537,10 @@ export default function PongGame() {
         .game-canvas {
           border-radius: 8px;
           box-shadow: 0 0 40px rgba(0, 242, 96, 0.2);
+          max-width: 100%;
+          max-height: 75vh;
+          aspect-ratio: 8/5;
+          object-fit: contain;
         }
         
         .overlay {

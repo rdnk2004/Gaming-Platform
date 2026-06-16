@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:rdnk@2004@localhost:5432/game_db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:rdnk%402004@localhost:5432/game_db"
     
     # JWT Auth
     SECRET_KEY: str = "your-super-secret-key-change-in-production"

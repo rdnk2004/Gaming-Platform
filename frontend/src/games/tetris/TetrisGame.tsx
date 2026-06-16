@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAuthStore, API_URL } from '../../store/authStore'
 
 /**
  * CYBER TETRIS - Cyberarcade Edition
@@ -27,14 +28,9 @@ const EDITION_CONFIG = {
     ultra: { width: 12, height: 24, cellSize: 24 }
 }
 
-// Mutable board config - set when game starts based on edition
-let BOARD_WIDTH = 10
-let BOARD_HEIGHT = 20
-let CELL_SIZE = 28
-
 // Create empty board - now stores color string
-const createBoard = (): (string | null)[][] =>
-    Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null))
+const createBoard = (rows: number, cols: number): (string | null)[][] =>
+    Array.from({ length: rows }, () => Array(cols).fill(null))
 
 // 7-bag randomizer
 const createBag = (): TetrominoType[] => {
@@ -102,6 +98,7 @@ interface Particle {
 
 export default function TetrisGame() {
     const canvasRef = useRef<HTMLCanvasElement>(null)
+    const containerRef = useRef<HTMLDivElement>(null)
     const [gameState, setGameState] = useState<'menu' | 'playing' | 'paused' | 'gameover'>('menu')
     const [edition, setEdition] = useState<Edition>('classic')
     const [score, setScore] = useState(0)
@@ -150,8 +147,17 @@ export default function TetrisGame() {
         comboTimer: number
         dangerZone: boolean
         pulsePhase: number
+        gameStartTime: number
+        cellSize: number
+        boardWidth: number
+        boardHeight: number
+        boardYOffset: number
+        boardRows: number
+        boardCols: number
+        canvasWidth: number
+        canvasHeight: number
     }>({
-        board: createBoard(),
+        board: createBoard(20, 10),
         currentPiece: null,
         holdPiece: null,
         canHold: true,
@@ -170,7 +176,16 @@ export default function TetrisGame() {
         colorShift: 0,
         comboTimer: 0,
         dangerZone: false,
-        pulsePhase: 0
+        pulsePhase: 0,
+        gameStartTime: 0,
+        cellSize: 28,
+        boardWidth: 280,
+        boardHeight: 560,
+        boardYOffset: 0,
+        boardRows: 20,
+        boardCols: 10,
+        canvasWidth: 500,
+        canvasHeight: 610
     })
 
     // Get next piece from bag
@@ -197,7 +212,7 @@ export default function TetrisGame() {
             type,
             shape: tetromino.shape.map(row => [...row]),
             color: tetromino.color,
-            x: Math.floor(BOARD_WIDTH / 2) - Math.floor(tetromino.shape[0].length / 2),
+            x: Math.floor(gameRef.current.boardCols / 2) - Math.floor(tetromino.shape[0].length / 2),
             y: type === 'I' ? -1 : 0,
             rotation: 0
         }
@@ -223,12 +238,14 @@ export default function TetrisGame() {
 
     // Check valid position
     const isValidPosition = (piece: Piece, board: (string | null)[][], offsetX = 0, offsetY = 0): boolean => {
+        const cols = gameRef.current.boardCols
+        const rows = gameRef.current.boardRows
         for (let y = 0; y < piece.shape.length; y++) {
             for (let x = 0; x < piece.shape[y].length; x++) {
                 if (piece.shape[y][x]) {
                     const boardX = piece.x + x + offsetX
                     const boardY = piece.y + y + offsetY
-                    if (boardX < 0 || boardX >= BOARD_WIDTH || boardY >= BOARD_HEIGHT) return false
+                    if (boardX < 0 || boardX >= cols || boardY >= rows) return false
                     if (boardY >= 0 && board[boardY][boardX]) return false
                 }
             }
@@ -288,7 +305,7 @@ export default function TetrisGame() {
                 if (game.currentPiece.shape[y][x]) {
                     const boardY = game.currentPiece.y + y
                     const boardX = game.currentPiece.x + x
-                    if (boardY >= 0 && boardY < BOARD_HEIGHT) {
+                    if (boardY >= 0 && boardY < game.boardRows) {
                         game.board[boardY][boardX] = game.currentPiece.color
                     }
                 }
@@ -300,12 +317,13 @@ export default function TetrisGame() {
     // Create explosion particles
     const createParticles = (x: number, y: number, color: string, count: number, explosive = false) => {
         const game = gameRef.current
+        const cellSize = game.cellSize
         for (let i = 0; i < count; i++) {
             const angle = (Math.PI * 2 / count) * i + Math.random() * 0.5
             const speed = explosive ? 8 + Math.random() * 8 : 3 + Math.random() * 4
             game.particles.push({
-                x: x + Math.random() * CELL_SIZE,
-                y: y + Math.random() * CELL_SIZE,
+                x: x + Math.random() * cellSize,
+                y: y + Math.random() * cellSize,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed - 2,
                 life: 1,
@@ -319,13 +337,17 @@ export default function TetrisGame() {
     const clearLines = () => {
         const game = gameRef.current
         const linesToClear: number[] = []
+        const rows = game.boardRows
+        const cols = game.boardCols
+        const cellSize = game.cellSize
+        const boardYOffset = game.boardYOffset
 
-        for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+        for (let y = rows - 1; y >= 0; y--) {
             if (game.board[y].every(cell => cell !== null)) {
                 linesToClear.push(y)
                 // Create particles for cleared line
-                for (let x = 0; x < BOARD_WIDTH; x++) {
-                    createParticles(x * CELL_SIZE, y * CELL_SIZE, game.board[y][x]!, 5, true)
+                for (let x = 0; x < cols; x++) {
+                    createParticles(x * cellSize, boardYOffset + y * cellSize, game.board[y][x]!, 5, true)
                 }
             }
         }
@@ -342,7 +364,7 @@ export default function TetrisGame() {
             // Remove lines
             linesToClear.sort((a, b) => b - a).forEach(y => {
                 game.board.splice(y, 1)
-                game.board.unshift(Array(BOARD_WIDTH).fill(null))
+                game.board.unshift(Array(cols).fill(null))
             })
 
             // Combo system
@@ -390,8 +412,8 @@ export default function TetrisGame() {
             for (let y = game.currentPiece.shape.length - 1; y >= 0; y--) {
                 if (game.currentPiece.shape[y][x]) {
                     createParticles(
-                        (game.currentPiece.x + x) * CELL_SIZE,
-                        (game.currentPiece.y + y) * CELL_SIZE + CELL_SIZE,
+                        (game.currentPiece.x + x) * game.cellSize,
+                        game.boardYOffset + (game.currentPiece.y + y) * game.cellSize + game.cellSize,
                         game.currentPiece.color,
                         3
                     )
@@ -434,10 +456,30 @@ export default function TetrisGame() {
         game.glitchIntensity = 1
         cancelAnimationFrame(game.animationId)
 
-        if (scoreRef.current > highScoreRef.current) {
-            setHighScore(scoreRef.current)
-            localStorage.setItem('tetrisHighScore', scoreRef.current.toString())
+        const finalScore = scoreRef.current
+        if (finalScore > highScoreRef.current) {
+            setHighScore(finalScore)
+            localStorage.setItem('tetrisHighScore', finalScore.toString())
         }
+
+        // Submit score to backend if logged in
+        const token = useAuthStore.getState().token
+        if (token) {
+            const duration = Math.floor((performance.now() - game.gameStartTime) / 1000)
+            fetch(`${API_URL}/leaderboard/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    game_slug: 'tetris',
+                    score: finalScore,
+                    duration_seconds: duration > 0 ? duration : 1
+                })
+            }).catch(err => console.error('Failed to submit score:', err))
+        }
+
         setGameState('gameover')
     }
 
@@ -474,7 +516,7 @@ export default function TetrisGame() {
     }
 
     // Draw cyberpunk block - BLACK with neon outline
-    const drawBlock = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, size: number = CELL_SIZE - 2, alpha: number = 1, isGhost = false) => {
+    const drawBlock = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, size?: number, alpha: number = 1, isGhost = false) => {
         const game = gameRef.current
         ctx.globalAlpha = alpha
 
@@ -486,12 +528,13 @@ export default function TetrisGame() {
 
         const padding = 1
         const outlineWidth = 3
+        const blockSize = size !== undefined ? size : game.cellSize - 2
 
         if (isGhost) {
             // Ghost piece - just outline
             ctx.strokeStyle = displayColor
             ctx.lineWidth = 2
-            ctx.strokeRect(x + padding + 2, y + padding + 2, size - 4, size - 4)
+            ctx.strokeRect(x + padding + 2, y + padding + 2, blockSize - 4, blockSize - 4)
             ctx.globalAlpha = 1
             return
         }
@@ -502,19 +545,19 @@ export default function TetrisGame() {
 
         // BLACK inner fill
         ctx.fillStyle = '#0a0a0f'
-        ctx.fillRect(x + padding, y + padding, size, size)
+        ctx.fillRect(x + padding, y + padding, blockSize, blockSize)
 
         // NEON OUTLINE - multiple layers for glow effect
         ctx.shadowBlur = 20
         ctx.strokeStyle = displayColor
         ctx.lineWidth = outlineWidth
-        ctx.strokeRect(x + padding + outlineWidth / 2, y + padding + outlineWidth / 2, size - outlineWidth, size - outlineWidth)
+        ctx.strokeRect(x + padding + outlineWidth / 2, y + padding + outlineWidth / 2, blockSize - outlineWidth, blockSize - outlineWidth)
 
         // Inner glow line
         ctx.shadowBlur = 8
         ctx.strokeStyle = displayColor
         ctx.lineWidth = 1.5
-        ctx.strokeRect(x + padding + 6, y + padding + 6, size - 12, size - 12)
+        ctx.strokeRect(x + padding + 6, y + padding + 6, blockSize - 12, blockSize - 12)
 
         // Corner accents (cyberpunk style)
         ctx.fillStyle = displayColor
@@ -523,26 +566,26 @@ export default function TetrisGame() {
         ctx.fillRect(x + padding, y + padding, 6, 2)
         ctx.fillRect(x + padding, y + padding, 2, 6)
         // Top-right
-        ctx.fillRect(x + size - 5, y + padding, 6, 2)
-        ctx.fillRect(x + size - 1, y + padding, 2, 6)
+        ctx.fillRect(x + blockSize - 5, y + padding, 6, 2)
+        ctx.fillRect(x + blockSize - 1, y + padding, 2, 6)
         // Bottom-left
-        ctx.fillRect(x + padding, y + size - 1, 6, 2)
-        ctx.fillRect(x + padding, y + size - 5, 2, 6)
+        ctx.fillRect(x + padding, y + blockSize - 1, 6, 2)
+        ctx.fillRect(x + padding, y + blockSize - 5, 2, 6)
         // Bottom-right
-        ctx.fillRect(x + size - 5, y + size - 1, 6, 2)
-        ctx.fillRect(x + size - 1, y + size - 5, 2, 6)
+        ctx.fillRect(x + blockSize - 5, y + blockSize - 1, 6, 2)
+        ctx.fillRect(x + blockSize - 1, y + blockSize - 5, 2, 6)
 
         // Scanlines (subtle CRT effect)
         ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'
-        for (let sy = 0; sy < size; sy += 2) {
-            ctx.fillRect(x + padding, y + padding + sy, size, 1)
+        for (let sy = 0; sy < blockSize; sy += 2) {
+            ctx.fillRect(x + padding, y + padding + sy, blockSize, 1)
         }
 
         // Inner highlight pulse (if in danger zone)
         if (game.dangerZone) {
             const pulse = Math.sin(game.pulsePhase * 5) * 0.3 + 0.3
             ctx.fillStyle = `rgba(255, 0, 85, ${pulse * 0.2})`
-            ctx.fillRect(x + padding + 4, y + padding + 4, size - 8, size - 8)
+            ctx.fillRect(x + padding + 4, y + padding + 4, blockSize - 8, blockSize - 8)
         }
 
         ctx.shadowBlur = 0
@@ -566,12 +609,17 @@ export default function TetrisGame() {
     }
 
     // Main draw function
-    const draw = (ctx: CanvasRenderingContext2D, time: number) => {
+    const draw = (ctx: CanvasRenderingContext2D, _time: number) => {
         const game = gameRef.current
-        const boardWidth = BOARD_WIDTH * CELL_SIZE
-        const boardHeight = BOARD_HEIGHT * CELL_SIZE
+        const boardWidth = game.boardWidth
+        const boardHeight = game.boardHeight
+        const boardYOffset = game.boardYOffset
+        const cellSize = game.cellSize
+        const boardRows = game.boardRows
+        const boardCols = game.boardCols
         const panelWidth = 180
         const totalWidth = boardWidth + panelWidth + 20
+        const totalHeight = game.canvasHeight
 
         // Update effects
         game.pulsePhase += 0.05
@@ -596,44 +644,44 @@ export default function TetrisGame() {
 
         // Clear with dark background
         ctx.fillStyle = '#030308'
-        ctx.fillRect(-10, -10, totalWidth + 20, boardHeight + 20)
+        ctx.fillRect(-10, -10, totalWidth + 20, totalHeight + 20)
 
         // Draw board background with gradient
-        const bgGradient = ctx.createLinearGradient(0, 0, 0, boardHeight)
+        const bgGradient = ctx.createLinearGradient(0, boardYOffset, 0, boardYOffset + boardHeight)
         bgGradient.addColorStop(0, '#0a0a12')
         bgGradient.addColorStop(0.5, '#0f0f1a')
         bgGradient.addColorStop(1, '#0a0a12')
         ctx.fillStyle = bgGradient
-        ctx.fillRect(0, 0, boardWidth, boardHeight)
+        ctx.fillRect(0, boardYOffset, boardWidth, boardHeight)
 
         // Danger zone red tint
         if (game.dangerZone) {
             const dangerAlpha = Math.sin(game.pulsePhase * 3) * 0.1 + 0.1
             ctx.fillStyle = `rgba(255, 0, 85, ${dangerAlpha})`
-            ctx.fillRect(0, 0, boardWidth, CELL_SIZE * 6)
+            ctx.fillRect(0, boardYOffset, boardWidth, cellSize * 6)
         }
 
         // Draw grid with neon accent
         ctx.strokeStyle = 'rgba(0, 255, 255, 0.06)'
         ctx.lineWidth = 1
-        for (let x = 0; x <= BOARD_WIDTH; x++) {
+        for (let x = 0; x <= boardCols; x++) {
             ctx.beginPath()
-            ctx.moveTo(x * CELL_SIZE, 0)
-            ctx.lineTo(x * CELL_SIZE, boardHeight)
+            ctx.moveTo(x * cellSize, boardYOffset)
+            ctx.lineTo(x * cellSize, boardYOffset + boardHeight)
             ctx.stroke()
         }
-        for (let y = 0; y <= BOARD_HEIGHT; y++) {
+        for (let y = 0; y <= boardRows; y++) {
             ctx.beginPath()
-            ctx.moveTo(0, y * CELL_SIZE)
-            ctx.lineTo(boardWidth, y * CELL_SIZE)
+            ctx.moveTo(0, boardYOffset + y * cellSize)
+            ctx.lineTo(boardWidth, boardYOffset + y * cellSize)
             ctx.stroke()
         }
 
         // Draw placed blocks
-        for (let y = 0; y < BOARD_HEIGHT; y++) {
-            for (let x = 0; x < BOARD_WIDTH; x++) {
+        for (let y = 0; y < boardRows; y++) {
+            for (let x = 0; x < boardCols; x++) {
                 if (game.board[y][x]) {
-                    drawBlock(ctx, x * CELL_SIZE, y * CELL_SIZE, game.board[y][x]!)
+                    drawBlock(ctx, x * cellSize, boardYOffset + y * cellSize, game.board[y][x]!)
                 }
             }
         }
@@ -646,7 +694,7 @@ export default function TetrisGame() {
                     if (game.currentPiece.shape[y][x]) {
                         const drawY = ghostY + y
                         if (drawY >= 0) {
-                            drawBlock(ctx, (game.currentPiece.x + x) * CELL_SIZE, drawY * CELL_SIZE, game.currentPiece.color, CELL_SIZE - 2, 0.4, true)
+                            drawBlock(ctx, (game.currentPiece.x + x) * cellSize, boardYOffset + drawY * cellSize, game.currentPiece.color, cellSize - 2, 0.4, true)
                         }
                     }
                 }
@@ -658,7 +706,7 @@ export default function TetrisGame() {
                     if (game.currentPiece.shape[y][x]) {
                         const drawY = game.currentPiece.y + y
                         if (drawY >= 0) {
-                            drawBlock(ctx, (game.currentPiece.x + x) * CELL_SIZE, drawY * CELL_SIZE, game.currentPiece.color)
+                            drawBlock(ctx, (game.currentPiece.x + x) * cellSize, boardYOffset + drawY * cellSize, game.currentPiece.color)
                         }
                     }
                 }
@@ -687,7 +735,7 @@ export default function TetrisGame() {
             ctx.fillStyle = `rgba(255, 0, 85, ${game.glitchIntensity * 0.3})`
             const sliceHeight = 5 + Math.random() * 20
             for (let i = 0; i < 5; i++) {
-                const y = Math.random() * boardHeight
+                const y = boardYOffset + Math.random() * boardHeight
                 ctx.fillRect(0, y, boardWidth, sliceHeight)
             }
         }
@@ -697,7 +745,7 @@ export default function TetrisGame() {
         ctx.shadowColor = game.dangerZone ? '#ff0055' : '#00f260'
         ctx.strokeStyle = game.dangerZone ? '#ff0055' : '#00f260'
         ctx.lineWidth = 3
-        ctx.strokeRect(1, 1, boardWidth - 2, boardHeight - 2)
+        ctx.strokeRect(1, boardYOffset + 1, boardWidth - 2, boardHeight - 2)
         ctx.shadowBlur = 0
 
         // === SIDE PANEL ===
@@ -850,22 +898,100 @@ export default function TetrisGame() {
         game.animationId = requestAnimationFrame(gameLoop)
     }
 
+    const [isFullscreen, setIsFullscreen] = useState(false)
+
+    const toggleFullscreen = () => {
+        const container = containerRef.current
+        if (!container) return
+        if (!document.fullscreenElement) {
+            container.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { })
+        } else {
+            document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { })
+        }
+    }
+
+    // Fullscreen change listener
+    useEffect(() => {
+        const handler = () => {
+            setIsFullscreen(!!document.fullscreenElement)
+            // Trigger resize calculation since dimensions changed
+            setTimeout(resizeCanvas, 50)
+        }
+        document.addEventListener('fullscreenchange', handler)
+        return () => document.removeEventListener('fullscreenchange', handler)
+    }, [])
+
+    const resizeCanvas = () => {
+        const canvas = canvasRef.current
+        const container = containerRef.current
+        if (!canvas || !container) return
+
+        const game = gameRef.current
+        const config = EDITION_CONFIG[editionRef.current]
+        game.boardRows = config.height
+        game.boardCols = config.width
+
+        const brandHeight = 90
+        const padding = 40
+        const availableHeight = (container.clientHeight || window.innerHeight) - brandHeight - padding
+
+        let cellSize = Math.floor(availableHeight / game.boardRows)
+        cellSize = Math.max(18, Math.min(cellSize, 40))
+
+        const boardHeight = game.boardRows * cellSize
+        const canvasHeight = Math.max(610, boardHeight)
+        const boardYOffset = Math.floor((canvasHeight - boardHeight) / 2)
+
+        const boardWidth = game.boardCols * cellSize
+        const panelWidth = 180
+        const canvasWidth = boardWidth + panelWidth + 20
+
+        const dpr = window.devicePixelRatio || 1
+        canvas.width = canvasWidth * dpr
+        canvas.height = canvasHeight * dpr
+        canvas.style.width = canvasWidth + 'px'
+        canvas.style.height = canvasHeight + 'px'
+
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+            ctx.resetTransform()
+            ctx.scale(dpr, dpr)
+        }
+
+        game.cellSize = cellSize
+        game.boardWidth = boardWidth
+        game.boardHeight = boardHeight
+        game.boardYOffset = boardYOffset
+        game.canvasWidth = canvasWidth
+        game.canvasHeight = canvasHeight
+
+        if (!game.running && ctx) {
+            draw(ctx, performance.now())
+        }
+    }
+
+    useEffect(() => {
+        window.addEventListener('resize', resizeCanvas)
+        return () => window.removeEventListener('resize', resizeCanvas)
+    }, [])
+
+    useEffect(() => {
+        resizeCanvas()
+    }, [edition])
+
     // Start game
     const startGame = () => {
         const canvas = canvasRef.current
         if (!canvas) return
 
-        // Set board dimensions based on selected edition
-        const config = EDITION_CONFIG[editionRef.current]
-        BOARD_WIDTH = config.width
-        BOARD_HEIGHT = config.height
-        CELL_SIZE = config.cellSize
-
-        canvas.width = BOARD_WIDTH * CELL_SIZE + 200
-        canvas.height = BOARD_HEIGHT * CELL_SIZE
-
         const game = gameRef.current
-        game.board = createBoard()
+        const config = EDITION_CONFIG[editionRef.current]
+        game.boardRows = config.height
+        game.boardCols = config.width
+
+        resizeCanvas()
+
+        game.board = createBoard(game.boardRows, game.boardCols)
         game.bag = createBag()
         game.nextQueue = []
         game.holdPiece = null
@@ -879,6 +1005,7 @@ export default function TetrisGame() {
         game.colorShift = 0
         game.comboTimer = 0
         game.dangerZone = false
+        game.gameStartTime = performance.now()
         game.running = true
 
         setScore(0)
@@ -950,7 +1077,7 @@ export default function TetrisGame() {
     }, [])
 
     return (
-        <div className="tetris-container">
+        <div ref={containerRef} className="tetris-container">
             <div className="game-wrapper">
                 <div className="game-brand">
                     <h1>CYBER TETRIS</h1>
@@ -1003,6 +1130,11 @@ export default function TetrisGame() {
                             <div className="control-row"><span className="k-box">P / Esc</span><span>Pause</span></div>
                         </div>
                         <button className="btn-start" onClick={startGame}>DEPLOY BLOCKS</button>
+                        <div style={{ marginTop: '15px' }}>
+                            <button className="edition-btn" onClick={toggleFullscreen}>
+                                {isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN [F]'}
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -1087,6 +1219,9 @@ export default function TetrisGame() {
                 .game-canvas {
                     display: block;
                     border-radius: 4px;
+                    max-width: 100%;
+                    max-height: 80vh;
+                    object-fit: contain;
                 }
 
                 .overlay {

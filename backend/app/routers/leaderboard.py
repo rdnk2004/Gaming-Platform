@@ -42,6 +42,24 @@ async def submit_score(
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
     
+    # Validation checks
+    if score_data.score <= 0:
+        raise HTTPException(status_code=400, detail="Score must be greater than zero")
+    if score_data.duration_seconds is not None and score_data.duration_seconds <= 0:
+        raise HTTPException(status_code=400, detail="Duration must be greater than zero")
+
+    # Game-specific sanity checks
+    if game.slug == "pong" and score_data.score > 11:
+        raise HTTPException(status_code=400, detail="Invalid score for Pong game (maximum is 11)")
+    if game.slug == "snake" and score_data.duration_seconds:
+        # Snake: 1 orb = 10 points. 5 orbs/sec (50 pts/sec) is the absolute limit.
+        if score_data.score / score_data.duration_seconds > 50:
+            raise HTTPException(status_code=400, detail="Score rate is unrealistically high")
+    if game.slug == "tetris" and score_data.duration_seconds:
+        # Tetris: Max score rate is around 1000 points/second under extreme combo conditions.
+        if score_data.score / score_data.duration_seconds > 1000:
+            raise HTTPException(status_code=400, detail="Score rate is unrealistically high")
+    
     # Create score
     score = Score(
         user_id=current_user.id,
