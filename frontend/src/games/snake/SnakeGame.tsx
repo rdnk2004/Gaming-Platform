@@ -337,17 +337,19 @@ class Snake {
         else if (this.effects.ghost > 0) ctx.shadowColor = '#a855f7'
         else ctx.shadowColor = this.color.glow
 
-        // Main body path with bezier curves for smoothness
+        // Main body path - break path if adjacent segments wrap around screen
         ctx.beginPath()
         ctx.moveTo(this.segments[0].x, this.segments[0].y)
-        for (let i = 1; i < this.segments.length - 1; i++) {
-            const xc = (this.segments[i].x + this.segments[i + 1].x) / 2
-            const yc = (this.segments[i].y + this.segments[i + 1].y) / 2
-            ctx.quadraticCurveTo(this.segments[i].x, this.segments[i].y, xc, yc)
-        }
-        if (this.segments.length > 1) {
-            const last = this.segments[this.segments.length - 1]
-            ctx.lineTo(last.x, last.y)
+        for (let i = 1; i < this.segments.length; i++) {
+            const prev = this.segments[i - 1]
+            const curr = this.segments[i]
+            if (dist(prev.x, prev.y, curr.x, curr.y) > 80) {
+                ctx.stroke()
+                ctx.beginPath()
+                ctx.moveTo(curr.x, curr.y)
+            } else {
+                ctx.lineTo(curr.x, curr.y)
+            }
         }
         ctx.strokeStyle = this.color.main
         ctx.stroke()

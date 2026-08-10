@@ -234,11 +234,13 @@ export default function PongGame() {
         const dt = Math.min((timestamp - game.lastTime) / 16.67, 2) // Normalize to ~60fps
         game.lastTime = timestamp
 
-        // P1 controls (W/S)
-        if (game.keys['w'] || game.keys['arrowup']) {
+        // P1 controls (W/S in 2P mode, W/S or Up/Down in 1P mode)
+        const p1Up = game.keys['w'] || (mode === '1p' && game.keys['arrowup'])
+        const p1Down = game.keys['s'] || (mode === '1p' && game.keys['arrowdown'])
+        if (p1Up) {
             game.p1.y = Math.max(0, game.p1.y - CONFIG.paddleSpeed * dt)
         }
-        if (game.keys['s'] || game.keys['arrowdown']) {
+        if (p1Down) {
             game.p1.y = Math.min(game.height - CONFIG.paddleHeight, game.p1.y + CONFIG.paddleSpeed * dt)
         }
 

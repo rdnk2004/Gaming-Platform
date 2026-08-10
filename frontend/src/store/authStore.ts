@@ -58,14 +58,17 @@ export const useAuthStore = create<AuthState>()(
                         }
                     })
 
-                    if (!userResponse.ok) throw new Error('Failed to fetch user')
+                    if (!userResponse.ok) {
+                        set({ user: null, token: null })
+                        throw new Error('Failed to fetch user profile')
+                    }
 
                     const user = await userResponse.json()
 
                     set({ user, token: data.access_token, isLoading: false })
                     return true
                 } catch (error) {
-                    set({ error: (error as Error).message, isLoading: false })
+                    set({ user: null, token: null, error: (error as Error).message, isLoading: false })
                     return false
                 }
             },
@@ -93,7 +96,7 @@ export const useAuthStore = create<AuthState>()(
             },
 
             logout: () => {
-                set({ user: null, token: null })
+                set({ user: null, token: null, error: null })
             },
 
             clearError: () => set({ error: null }),

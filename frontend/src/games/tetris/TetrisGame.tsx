@@ -1031,16 +1031,16 @@ export default function TetrisGame() {
                     e.preventDefault()
                 }
 
-                if (key === 'arrowup' || key === 'w' || key === 'x') {
+                if ((key === 'arrowup' || key === 'w' || key === 'x') && !e.repeat) {
                     rotatePiece(1)
                 }
-                if (key === 'z' || key === 'control') {
+                if ((key === 'z' || key === 'control') && !e.repeat) {
                     rotatePiece(-1)
                 }
-                if (key === ' ') {
+                if (key === ' ' && !e.repeat) {
                     hardDrop()
                 }
-                if (key === 'c' || key === 'shift') {
+                if ((key === 'c' || key === 'shift') && !e.repeat) {
                     holdPiece()
                 }
                 // Rainbow mode - G key

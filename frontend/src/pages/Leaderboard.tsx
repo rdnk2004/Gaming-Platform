@@ -100,7 +100,7 @@ export default function Leaderboard() {
                             <div className="podium-section">
                                 {podiumOrder().map((entry) => (
                                     <motion.div
-                                        key={entry.username}
+                                        key={`${entry.username}-${entry.rank}`}
                                         className={`podium-card podium-${entry.class}`}
                                         initial={{ opacity: 0, scale: 0.8, y: 30 }}
                                         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -135,7 +135,7 @@ export default function Leaderboard() {
                                     <AnimatePresence>
                                         {tableEntries.map((entry, index) => (
                                             <motion.div
-                                                key={entry.username}
+                                                key={`${entry.username}-${entry.rank}`}
                                                 className="table-row"
                                                 initial={{ opacity: 0, x: -25 }}
                                                 animate={{ opacity: 1, x: 0 }}

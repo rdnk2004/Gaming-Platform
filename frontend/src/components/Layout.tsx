@@ -1,16 +1,18 @@
+import { useState } from 'react'
 import { Outlet, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/authStore'
 
 export default function Layout() {
   const { user, logout } = useAuthStore()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <div className="layout">
       <header className="header">
         <div className="container">
           <nav className="nav">
-            <Link to="/" className="brand">
+            <Link to="/" className="brand" onClick={() => setMobileMenuOpen(false)}>
               <motion.div
                 initial={{ opacity: 0, x: -30 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -22,11 +24,19 @@ export default function Layout() {
               </motion.div>
             </Link>
 
-            <div className="nav-links">
-              <Link to="/" className="nav-link">
+            <button 
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle navigation menu"
+            >
+              {mobileMenuOpen ? '✕' : '☰'}
+            </button>
+
+            <div className={`nav-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+              <Link to="/" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <span className="nav-icon">🕹️</span> Games
               </Link>
-              <Link to="/leaderboard" className="nav-link">
+              <Link to="/leaderboard" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <span className="nav-icon">🏆</span> Leaderboard
               </Link>
               {user ? (
@@ -35,14 +45,14 @@ export default function Layout() {
                     <span className="text-secondary user-name">{user.username}</span>
                     <span className="user-level">LVL {user.level}</span>
                   </span>
-                  <button onClick={logout} className="btn btn-secondary btn-logout">
+                  <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="btn btn-secondary btn-logout">
                     Logout
                   </button>
                 </div>
               ) : (
                 <div className="auth-buttons">
-                  <Link to="/login" className="btn btn-secondary btn-login">Login</Link>
-                  <Link to="/register" className="btn btn-primary btn-signup">Sign Up</Link>
+                  <Link to="/login" className="btn btn-secondary btn-login" onClick={() => setMobileMenuOpen(false)}>Login</Link>
+                  <Link to="/register" className="btn btn-primary btn-signup" onClick={() => setMobileMenuOpen(false)}>Sign Up</Link>
                 </div>
               )}
             </div>
@@ -86,6 +96,7 @@ export default function Layout() {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          position: relative;
         }
 
         .brand {
@@ -121,6 +132,17 @@ export default function Layout() {
           letter-spacing: 2.5px;
           font-weight: 700;
           margin-top: 2px;
+        }
+
+        .mobile-menu-toggle {
+          display: none;
+          background: transparent;
+          border: 1px solid rgba(139, 92, 246, 0.3);
+          color: var(--secondary);
+          font-size: 1.5rem;
+          padding: 4px 12px;
+          border-radius: var(--radius-md);
+          cursor: pointer;
         }
         
         .nav-links {
@@ -240,11 +262,26 @@ export default function Layout() {
         }
         
         @media (max-width: 768px) {
+          .mobile-menu-toggle {
+            display: block;
+          }
           .nav-links {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            flex-direction: column;
+            background: rgba(10, 8, 22, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            margin-top: var(--space-sm);
             gap: var(--space-md);
           }
-          .nav-link {
-            display: none;
+          .nav-links.mobile-open {
+            display: flex;
           }
           .brand-title {
             font-size: 22px;

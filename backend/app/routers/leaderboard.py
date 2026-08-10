@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db
 from app.models import Score, User, Game
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/leaderboard", tags=["Leaderboard"])
 class ScoreSubmit(BaseModel):
     game_slug: str
     score: int
-    duration_seconds: int = None
+    duration_seconds: Optional[int] = None
 
 
 class LeaderboardEntry(BaseModel):
@@ -45,19 +45,20 @@ async def submit_score(
     # Validation checks
     if score_data.score <= 0:
         raise HTTPException(status_code=400, detail="Score must be greater than zero")
-    if score_data.duration_seconds is not None and score_data.duration_seconds <= 0:
-        raise HTTPException(status_code=400, detail="Duration must be greater than zero")
+    if score_data.duration_seconds is not None and score_data.duration_seconds < 0:
+        raise HTTPException(status_code=400, detail="Duration cannot be negative")
 
     # Game-specific sanity checks
+    dur = score_data.duration_seconds if (score_data.duration_seconds is not None and score_data.duration_seconds > 0) else 1
     if game.slug == "pong" and score_data.score > 11:
         raise HTTPException(status_code=400, detail="Invalid score for Pong game (maximum is 11)")
-    if game.slug == "snake" and score_data.duration_seconds:
+    if game.slug == "snake":
         # Snake: 1 orb = 10 points. 5 orbs/sec (50 pts/sec) is the absolute limit.
-        if score_data.score / score_data.duration_seconds > 50:
+        if (score_data.score / dur) > 50:
             raise HTTPException(status_code=400, detail="Score rate is unrealistically high")
-    if game.slug == "tetris" and score_data.duration_seconds:
+    if game.slug == "tetris":
         # Tetris: Max score rate is around 1000 points/second under extreme combo conditions.
-        if score_data.score / score_data.duration_seconds > 1000:
+        if (score_data.score / dur) > 1000:
             raise HTTPException(status_code=400, detail="Score rate is unrealistically high")
     
     # Create score
@@ -69,8 +70,8 @@ async def submit_score(
     )
     db.add(score)
     
-    # Award XP (10 XP per 100 points)
-    xp_earned = score_data.score // 10
+    # Award XP (10 XP per 100 points = 1 XP per 10 points, minimum 1)
+    xp_earned = max(1, score_data.score // 10)
     current_user.xp += xp_earned
     
     # Level up check (every 1000 XP)
