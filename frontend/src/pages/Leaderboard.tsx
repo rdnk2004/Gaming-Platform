@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { API_URL } from '../store/authStore'
+import { soundFx } from '../services/soundFx'
 
 interface LeaderboardEntry {
     rank: number
@@ -13,6 +14,7 @@ interface LeaderboardEntry {
 
 export default function Leaderboard() {
     const [selectedGame, setSelectedGame] = useState<'snake' | 'tetris' | 'pong'>('snake')
+    const [searchQuery, setSearchQuery] = useState('')
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -36,9 +38,14 @@ export default function Leaderboard() {
         fetchLeaderboard()
     }, [selectedGame])
 
+    // Filter leaderboard by search query
+    const filteredLeaderboard = leaderboard.filter(entry => 
+        entry.username.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+
     // Partition top 3 podium entries vs remaining rows
-    const topThree = leaderboard.slice(0, 3)
-    const tableEntries = leaderboard.slice(3)
+    const topThree = filteredLeaderboard.slice(0, 3)
+    const tableEntries = filteredLeaderboard.slice(3)
 
     // Rearrange podium so Silver is on left, Gold in middle, Bronze on right
     const podiumOrder = () => {
@@ -63,22 +70,32 @@ export default function Leaderboard() {
                     <div className="game-tabs">
                         <button 
                             className={`tab-btn ${selectedGame === 'snake' ? 'active' : ''}`}
-                            onClick={() => setSelectedGame('snake')}
+                            onClick={() => { soundFx.playClick(); setSelectedGame('snake'); }}
                         >
                             <span className="tab-icon">🐍</span> Snake
                         </button>
                         <button 
                             className={`tab-btn ${selectedGame === 'tetris' ? 'active' : ''}`}
-                            onClick={() => setSelectedGame('tetris')}
+                            onClick={() => { soundFx.playClick(); setSelectedGame('tetris'); }}
                         >
                             <span className="tab-icon">🧱</span> Tetris
                         </button>
                         <button 
                             className={`tab-btn ${selectedGame === 'pong' ? 'active' : ''}`}
-                            onClick={() => setSelectedGame('pong')}
+                            onClick={() => { soundFx.playClick(); setSelectedGame('pong'); }}
                         >
                             <span className="tab-icon">🏓</span> Pong
                         </button>
+                    </div>
+
+                    <div className="search-bar-container">
+                        <input
+                            type="text"
+                            className="input search-input"
+                            placeholder="🔍 Search operative username..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                     </div>
                 </div>
 
@@ -188,6 +205,22 @@ export default function Leaderboard() {
                   padding: 6px;
                   border-radius: var(--radius-lg);
                   backdrop-filter: blur(8px);
+                }
+
+                .search-bar-container {
+                  width: 100%;
+                  max-width: 380px;
+                  margin-top: var(--space-xs);
+                }
+
+                .search-input {
+                  text-align: center;
+                  font-family: var(--font-display);
+                  font-size: 0.85rem;
+                  letter-spacing: 1px;
+                  border-radius: var(--radius-full);
+                  background: rgba(13, 9, 28, 0.7);
+                  border: 1px solid rgba(139, 92, 246, 0.25);
                 }
 
                 .tab-btn {

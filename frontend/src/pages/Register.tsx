@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/authStore'
+import { soundFx } from '../services/soundFx'
 
 export default function Register() {
     const [username, setUsername] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
+    const [showPassword, setShowPassword] = useState(false)
     const [localError, setLocalError] = useState('')
 
     const { register, isLoading, error, clearError } = useAuthStore()
@@ -15,21 +17,27 @@ export default function Register() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        soundFx.playClick()
         setLocalError('')
 
         if (password !== confirmPassword) {
+            soundFx.playExplosion()
             setLocalError('Passwords do not match')
             return
         }
 
         if (password.length < 6) {
+            soundFx.playExplosion()
             setLocalError('Password must be at least 6 characters')
             return
         }
 
         const success = await register(username, email, password)
         if (success) {
+            soundFx.playFanfare()
             navigate('/login')
+        } else {
+            soundFx.playExplosion()
         }
     }
 
@@ -85,30 +93,50 @@ export default function Register() {
 
                     <div className="input-group">
                         <label htmlFor="password">Security Code</label>
-                        <input
-                            id="password"
-                            type="password"
-                            className="input"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Create a password"
-                            autoComplete="new-password"
-                            required
-                        />
+                        <div className="password-input-wrapper">
+                            <input
+                                id="password"
+                                type={showPassword ? "text" : "password"}
+                                className="input"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Create a password"
+                                autoComplete="new-password"
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="password-toggle-btn"
+                                onClick={() => setShowPassword(!showPassword)}
+                                tabIndex={-1}
+                            >
+                                {showPassword ? '🙈' : '👁️'}
+                            </button>
+                        </div>
                     </div>
 
                     <div className="input-group">
                         <label htmlFor="confirmPassword">Verify Security Code</label>
-                        <input
-                            id="confirmPassword"
-                            type="password"
-                            className="input"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            placeholder="Confirm your password"
-                            autoComplete="new-password"
-                            required
-                        />
+                        <div className="password-input-wrapper">
+                            <input
+                                id="confirmPassword"
+                                type={showPassword ? "text" : "password"}
+                                className="input"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="Confirm your password"
+                                autoComplete="new-password"
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="password-toggle-btn"
+                                onClick={() => setShowPassword(!showPassword)}
+                                tabIndex={-1}
+                            >
+                                {showPassword ? '🙈' : '👁️'}
+                            </button>
+                        </div>
                     </div>
 
                     <button
@@ -200,6 +228,27 @@ export default function Register() {
           text-shadow: 0 0 8px var(--primary-glow);
         }
         
+        .password-input-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .password-toggle-btn {
+          position: absolute;
+          right: 12px;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          font-size: 1.1rem;
+          opacity: 0.7;
+          transition: opacity var(--transition-fast);
+        }
+
+        .password-toggle-btn:hover {
+          opacity: 1;
+        }
+
         .error-alert {
           background: rgba(255, 0, 85, 0.08);
           border: 1px solid var(--accent);

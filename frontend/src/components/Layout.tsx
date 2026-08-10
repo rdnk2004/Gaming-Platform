@@ -2,17 +2,25 @@ import { useState } from 'react'
 import { Outlet, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '../store/authStore'
+import { soundFx } from '../services/soundFx'
 
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMuted, setIsMuted] = useState(() => soundFx.getIsMuted())
+
+  const handleToggleSound = () => {
+    const muted = soundFx.toggleMute()
+    setIsMuted(muted)
+    if (!muted) soundFx.playClick()
+  }
 
   return (
     <div className="layout">
       <header className="header">
         <div className="container">
           <nav className="nav">
-            <Link to="/" className="brand" onClick={() => setMobileMenuOpen(false)}>
+            <Link to="/" className="brand" onClick={() => { soundFx.playClick(); setMobileMenuOpen(false); }}>
               <motion.div
                 initial={{ opacity: 0, x: -30 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -24,19 +32,29 @@ export default function Layout() {
               </motion.div>
             </Link>
 
-            <button 
-              className="mobile-menu-toggle"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle navigation menu"
-            >
-              {mobileMenuOpen ? '✕' : '☰'}
-            </button>
+            <div className="nav-actions">
+              <button 
+                className="sound-toggle-btn"
+                onClick={handleToggleSound}
+                title={isMuted ? "Unmute Arcade Audio" : "Mute Arcade Audio"}
+              >
+                {isMuted ? '🔇 Muted' : '🔊 Sound ON'}
+              </button>
+
+              <button 
+                className="mobile-menu-toggle"
+                onClick={() => { soundFx.playClick(); setMobileMenuOpen(!mobileMenuOpen); }}
+                aria-label="Toggle navigation menu"
+              >
+                {mobileMenuOpen ? '✕' : '☰'}
+              </button>
+            </div>
 
             <div className={`nav-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-              <Link to="/" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <Link to="/" className="nav-link" onClick={() => { soundFx.playClick(); setMobileMenuOpen(false); }}>
                 <span className="nav-icon">🕹️</span> Games
               </Link>
-              <Link to="/leaderboard" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <Link to="/leaderboard" className="nav-link" onClick={() => { soundFx.playClick(); setMobileMenuOpen(false); }}>
                 <span className="nav-icon">🏆</span> Leaderboard
               </Link>
               {user ? (
@@ -45,14 +63,14 @@ export default function Layout() {
                     <span className="text-secondary user-name">{user.username}</span>
                     <span className="user-level">LVL {user.level}</span>
                   </span>
-                  <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="btn btn-secondary btn-logout">
+                  <button onClick={() => { soundFx.playClick(); logout(); setMobileMenuOpen(false); }} className="btn btn-secondary btn-logout">
                     Logout
                   </button>
                 </div>
               ) : (
                 <div className="auth-buttons">
-                  <Link to="/login" className="btn btn-secondary btn-login" onClick={() => setMobileMenuOpen(false)}>Login</Link>
-                  <Link to="/register" className="btn btn-primary btn-signup" onClick={() => setMobileMenuOpen(false)}>Sign Up</Link>
+                  <Link to="/login" className="btn btn-secondary btn-login" onClick={() => { soundFx.playClick(); setMobileMenuOpen(false); }}>Login</Link>
+                  <Link to="/register" className="btn btn-primary btn-signup" onClick={() => { soundFx.playClick(); setMobileMenuOpen(false); }}>Sign Up</Link>
                 </div>
               )}
             </div>
@@ -132,6 +150,33 @@ export default function Layout() {
           letter-spacing: 2.5px;
           font-weight: 700;
           margin-top: 2px;
+        }
+
+        .nav-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--space-sm);
+        }
+
+        .sound-toggle-btn {
+          background: rgba(139, 92, 246, 0.12);
+          border: 1px solid rgba(139, 92, 246, 0.3);
+          color: var(--secondary);
+          padding: 6px 14px;
+          border-radius: var(--radius-md);
+          font-family: var(--font-display);
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+          letter-spacing: 1px;
+        }
+
+        .sound-toggle-btn:hover {
+          background: rgba(0, 240, 255, 0.18);
+          border-color: var(--secondary);
+          box-shadow: 0 0 12px rgba(0, 240, 255, 0.35);
+          transform: translateY(-1px);
         }
 
         .mobile-menu-toggle {

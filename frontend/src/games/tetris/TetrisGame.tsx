@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore, API_URL } from '../../store/authStore'
+import { soundFx } from '../../services/soundFx'
 
 /**
  * CYBER TETRIS - Cyberarcade Edition
@@ -289,6 +290,7 @@ export default function TetrisGame() {
                 const testPiece = { ...piece, shape: rotated, x: piece.x + kx, y: piece.y - ky, rotation: newRotation }
                 if (isValidPosition(testPiece, game.board)) {
                     game.currentPiece = testPiece
+                    soundFx.playRotate()
                     return
                 }
             }
@@ -353,6 +355,7 @@ export default function TetrisGame() {
         }
 
         if (linesToClear.length > 0) {
+            soundFx.playLineClear()
             // Screen shake based on lines cleared
             game.screenShake = linesToClear.length * 4
 
@@ -385,6 +388,7 @@ export default function TetrisGame() {
                 const newLevel = Math.floor(newLines / 10) + 1
                 if (newLevel > levelRef.current) {
                     setLevel(newLevel)
+                    soundFx.playFanfare()
                     game.dropInterval = Math.max(80, 1000 - (newLevel - 1) * 80)
                 }
                 return newLines
@@ -422,6 +426,7 @@ export default function TetrisGame() {
             }
         }
 
+        soundFx.playImpact()
         game.screenShake = 3
         setScore(prev => prev + dropDistance * 2)
         lockPiece()
@@ -436,6 +441,7 @@ export default function TetrisGame() {
         const game = gameRef.current
         if (!game.currentPiece || !game.canHold) return
 
+        soundFx.playRotate()
         const currentType = game.currentPiece.type
         if (game.holdPiece) {
             game.currentPiece = createPiece(game.holdPiece)
@@ -454,6 +460,7 @@ export default function TetrisGame() {
         const game = gameRef.current
         game.running = false
         game.glitchIntensity = 1
+        soundFx.playExplosion()
         cancelAnimationFrame(game.animationId)
 
         const finalScore = scoreRef.current

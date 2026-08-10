@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore, API_URL } from '../../store/authStore'
+import { soundFx } from '../../services/soundFx'
 
 /**
  * HYPER SNAKE ENGINE - Complete Replica of snake_pg.html
@@ -555,12 +556,14 @@ export default function SnakeGame() {
             const died = snake.update(dt, game.keys, width, height, currentWallsEnabled, enemy)
             if (died) {
                 createExplosion(snake.head.x, snake.head.y, snake.color.main, 20)
+                soundFx.playExplosion()
             }
 
             // Food collision
             if (snake.alive && game.food && dist(snake.head.x, snake.head.y, game.food.x, game.food.y) < snake.width + 10) {
                 snake.grow()
                 createExplosion(game.food.x, game.food.y, CONFIG.colors.food, 12)
+                soundFx.playEat()
                 game.food.respawn(width, height)
 
                 if (snake.orbsEaten === 1) unlockAchievement('first_blood')
@@ -593,6 +596,7 @@ export default function SnakeGame() {
                     if (p.type === 'speed') snake.effects.speed = 300
                     if (p.type === 'ghost') snake.effects.ghost = 300
                     createExplosion(p.x, p.y, p.color, 10)
+                    soundFx.playLineClear()
                 }
             })
         })
@@ -607,6 +611,7 @@ export default function SnakeGame() {
                     createExplosion(bubble.x, bubble.y, bubble.color, 15)
                     bubble.life = 0
                     snake.score += 50
+                    soundFx.playLineClear()
                     setScores({ p1: game.snakes[0]?.score || 0, p2: game.snakes[1]?.score || 0 })
                     unlockAchievement('bubble_popper')
                 }

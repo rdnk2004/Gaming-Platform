@@ -1,5 +1,8 @@
+import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore'
+import { soundFx } from '../services/soundFx'
 
 const games = [
   {
@@ -55,6 +58,81 @@ const cardVariants = {
 }
 
 export default function Home() {
+  const { user } = useAuthStore()
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Animated background cyber particle mesh
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let animationId: number
+    const particles: Array<{ x: number; y: number; vx: number; vy: number; radius: number; alpha: number }> = []
+
+    const resize = () => {
+      canvas.width = canvas.parentElement?.clientWidth || window.innerWidth
+      canvas.height = 320
+    }
+    resize()
+
+    for (let i = 0; i < 45; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        radius: Math.random() * 2 + 1,
+        alpha: Math.random() * 0.5 + 0.2
+      })
+    }
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      particles.forEach((p, idx) => {
+        p.x += p.vx
+        p.y += p.vy
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1
+
+        ctx.fillStyle = idx % 2 === 0 ? 'rgba(0, 240, 255, ' + p.alpha + ')' : 'rgba(139, 92, 246, ' + p.alpha + ')'
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2)
+        ctx.fill()
+      })
+
+      // Connect close particles with subtle lines
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x
+          const dy = particles[i].y - particles[j].y
+          const d = Math.hypot(dx, dy)
+          if (d < 110) {
+            ctx.strokeStyle = `rgba(139, 92, 246, ${0.15 * (1 - d / 110)})`
+            ctx.lineWidth = 0.8
+            ctx.beginPath()
+            ctx.moveTo(particles[i].x, particles[i].y)
+            ctx.lineTo(particles[j].x, particles[j].y)
+            ctx.stroke()
+          }
+        }
+      }
+      animationId = requestAnimationFrame(draw)
+    }
+    draw()
+
+    window.addEventListener('resize', resize)
+    return () => {
+      window.removeEventListener('resize', resize)
+      cancelAnimationFrame(animationId)
+    }
+  }, [])
+
+  // XP Progress calculation
+  const currentXpInLevel = user ? user.xp % 1000 : 0
+  const xpPercentage = Math.min(100, Math.max(0, Math.floor((currentXpInLevel / 1000) * 100)))
+
   return (
     <div className="container home-page">
       <motion.section
@@ -63,11 +141,60 @@ export default function Home() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: 'easeOut' }}
       >
+        <canvas ref={canvasRef} className="hero-particle-canvas" />
         <div className="hero-glow"></div>
         <h2 className="hero-title">READY PLAYER ONE?</h2>
         <p className="hero-subtitle">
           Welcome to the retro-futuristic arcade block. Choose your grid and dominate the leaderboard.
         </p>
+
+        {/* User Profile Stats HUD Card */}
+        {user ? (
+          <motion.div 
+            className="user-xp-hud"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <div className="hud-left">
+              <span className="hud-avatar">{user.username.charAt(0).toUpperCase()}</span>
+              <div className="hud-identity">
+                <span className="hud-name">{user.username}</span>
+                <span className="hud-level-badge">LEVEL {user.level} ARENA OPERATIVE</span>
+              </div>
+            </div>
+            <div className="hud-xp-section">
+              <div className="hud-xp-label">
+                <span>XP PROGRESS</span>
+                <span className="hud-xp-val">{user.xp} XP total ({currentXpInLevel}/1000 to next level)</span>
+              </div>
+              <div className="hud-xp-track">
+                <div className="hud-xp-fill" style={{ width: `${xpPercentage}%` }}></div>
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <div className="guest-cta-banner">
+            <span>⚡ Connect profile to track XP, level up, and post high scores to the global hall of fame.</span>
+            <Link to="/register" className="btn btn-secondary btn-sm" onClick={() => soundFx.playClick()}>JOIN MAINFRAME</Link>
+          </div>
+        )}
+
+        {/* Live Arena Ticker */}
+        <div className="arena-ticker">
+          <div className="ticker-item">
+            <span className="beacon-dot"></span>
+            <span className="ticker-text">ARENA ONLINE</span>
+          </div>
+          <div className="ticker-item">
+            <span className="ticker-icon">🎮</span>
+            <span className="ticker-text">3 HYPER ARENAS READY</span>
+          </div>
+          <div className="ticker-item">
+            <span className="ticker-icon">⚡</span>
+            <span className="ticker-text">REAL-TIME LEADERBOARDS</span>
+          </div>
+        </div>
       </motion.section>
 
       <section className="games-section">
@@ -92,6 +219,7 @@ export default function Home() {
               <Link 
                 to={`/game/${game.slug}`} 
                 className="game-card"
+                onClick={() => soundFx.playClick()}
                 style={{ 
                   '--game-color': game.color, 
                   '--game-glow': game.glow,
@@ -193,12 +321,164 @@ export default function Home() {
           filter: drop-shadow(0 0 15px rgba(139, 92, 246, 0.4));
         }
         
-        .hero-subtitle {
-          font-size: 15px;
-          color: var(--text-secondary);
+        .hero-particle-canvas {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 0;
+          opacity: 0.6;
+        }
+
+        .user-xp-hud {
+          margin-top: var(--space-xl);
+          width: 100%;
           max-width: 650px;
-          margin: 0 auto;
-          line-height: 1.6;
+          background: rgba(13, 9, 28, 0.75);
+          border: 1px solid rgba(139, 92, 246, 0.25);
+          border-radius: var(--radius-lg);
+          padding: 16px 24px;
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          backdrop-filter: blur(12px);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+          position: relative;
+          z-index: 1;
+        }
+
+        .hud-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .hud-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: var(--radius-full);
+          background: linear-gradient(135deg, var(--primary), var(--secondary));
+          color: var(--bg-primary);
+          font-family: var(--font-display);
+          font-weight: 900;
+          font-size: 1.2rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+        }
+
+        .hud-identity {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .hud-name {
+          font-family: var(--font-display);
+          font-weight: 800;
+          font-size: 1rem;
+          color: #fff;
+        }
+
+        .hud-level-badge {
+          font-size: 10px;
+          color: var(--secondary);
+          letter-spacing: 1px;
+          font-weight: 700;
+        }
+
+        .hud-xp-section {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .hud-xp-label {
+          display: flex;
+          justify-content: space-between;
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--text-secondary);
+          font-family: var(--font-display);
+          letter-spacing: 1px;
+        }
+
+        .hud-xp-val {
+          color: var(--secondary);
+        }
+
+        .hud-xp-track {
+          height: 8px;
+          background: rgba(255, 255, 255, 0.08);
+          border-radius: var(--radius-full);
+          overflow: hidden;
+          border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+
+        .hud-xp-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--primary), var(--secondary));
+          border-radius: var(--radius-full);
+          transition: width 0.5s ease-out;
+          box-shadow: 0 0 8px var(--secondary-glow);
+        }
+
+        .guest-cta-banner {
+          margin-top: var(--space-lg);
+          padding: 12px 24px;
+          background: rgba(139, 92, 246, 0.08);
+          border: 1px solid rgba(139, 92, 246, 0.2);
+          border-radius: var(--radius-md);
+          display: flex;
+          align-items: center;
+          gap: 15px;
+          font-size: 13px;
+          color: var(--text-secondary);
+          position: relative;
+          z-index: 1;
+        }
+
+        .btn-sm {
+          padding: 6px 14px;
+          font-size: 0.75rem;
+          white-space: nowrap;
+        }
+
+        .arena-ticker {
+          display: flex;
+          gap: 30px;
+          margin-top: var(--space-xl);
+          position: relative;
+          z-index: 1;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+
+        .ticker-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-family: var(--font-display);
+          font-size: 11px;
+          letter-spacing: 1.5px;
+          color: var(--text-muted);
+        }
+
+        .beacon-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #00f260;
+          box-shadow: 0 0 10px #00f260;
+          animation: beaconPulse 1.5s infinite;
+        }
+
+        @keyframes beaconPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.4); opacity: 0.5; }
         }
 
         .games-section {

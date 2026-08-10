@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAuthStore, API_URL } from '../../store/authStore'
+import { soundFx } from '../../services/soundFx'
 
 /**
  * CYBER PONG - Cyberarcade Edition
@@ -288,6 +289,7 @@ export default function PongGame() {
             game.ball.vy *= -1
             game.ball.y = Math.max(CONFIG.ballSize, Math.min(game.height - CONFIG.ballSize, game.ball.y))
             createParticles(game.ball.x, game.ball.y, '#ffffff', 5)
+            soundFx.playImpact()
         }
 
         // Paddle collision - P1
@@ -298,7 +300,6 @@ export default function PongGame() {
             game.ball.y <= game.p1.y + CONFIG.paddleHeight &&
             game.ball.vx < 0
         ) {
-            // Calculate bounce angle based on where ball hit paddle
             const hitPos = (game.ball.y - game.p1.y) / CONFIG.paddleHeight
             const angle = (hitPos - 0.5) * Math.PI * 0.7
             game.ball.speed = Math.min(game.ball.speed + 0.3, CONFIG.maxBallSpeed)
@@ -306,6 +307,7 @@ export default function PongGame() {
             game.ball.vy = Math.sin(angle) * game.ball.speed
             game.ball.x = game.p1.x + CONFIG.paddleWidth + CONFIG.ballSize
             createParticles(game.ball.x, game.ball.y, CONFIG.colors.p1, 10)
+            soundFx.playImpact()
         }
 
         // Paddle collision - P2
@@ -323,6 +325,7 @@ export default function PongGame() {
             game.ball.vy = Math.sin(angle) * game.ball.speed
             game.ball.x = game.p2.x - CONFIG.ballSize
             createParticles(game.ball.x, game.ball.y, CONFIG.colors.p2, 10)
+            soundFx.playImpact()
         }
 
         // Scoring
@@ -333,9 +336,11 @@ export default function PongGame() {
             if (game.p2.score >= CONFIG.winScore) {
                 setWinner(mode === '1p' ? 'CPU Wins!' : 'Player 2 Wins!')
                 setGameState('gameover')
+                soundFx.playFanfare()
                 submitPongScore(game.p1.score)
                 return
             }
+            soundFx.playEat()
             resetBall(1)
         }
         if (game.ball.x > game.width) {
@@ -345,9 +350,11 @@ export default function PongGame() {
             if (game.p1.score >= CONFIG.winScore) {
                 setWinner('Player 1 Wins!')
                 setGameState('gameover')
+                soundFx.playFanfare()
                 submitPongScore(game.p1.score)
                 return
             }
+            soundFx.playEat()
             resetBall(-1)
         }
 
