@@ -27,34 +27,6 @@ export default function GamePage() {
   return (
     <div className="game-page">
       {renderGame()}
-
-      <style>{`
-        .game-page {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          width: 100vw;
-          overflow: hidden;
-          position: fixed;
-          top: 0;
-          left: 0;
-        }
-        
-        .game-not-found {
-          text-align: center;
-          padding: var(--space-2xl);
-        }
-        
-        .game-not-found h2 {
-          margin-bottom: var(--space-md);
-        }
-        
-        .game-not-found p {
-          color: var(--text-secondary);
-        }
-      `}</style>
     </div>
   )
 }

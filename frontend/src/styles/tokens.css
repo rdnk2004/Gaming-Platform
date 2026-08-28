@@ -1,0 +1,102 @@
+/* ==========================================================================
+   CYBERARCADE EVOLVED - DESIGN TOKENS
+   Theme: Vibrant Violets, Cyber Cyans, Glowing Magentas & Neon Accents
+   ========================================================================== */
+
+:root {
+  /* HSL Color System */
+  --primary-hue: 265;   /* Electric Violet */
+  --secondary-hue: 185; /* Cyber Cyan */
+  --accent-hue: 340;    /* Neon Rose / Pink */
+  --emerald-hue: 145;   /* Neon Emerald */
+  --amber-hue: 45;      /* Cyber Amber / Gold */
+
+  /* Primary Palette */
+  --primary: hsl(var(--primary-hue), 90%, 65%);
+  --primary-dark: hsl(var(--primary-hue), 85%, 45%);
+  --primary-glow: hsla(var(--primary-hue), 90%, 65%, 0.4);
+  --primary-subtle: hsla(var(--primary-hue), 90%, 65%, 0.12);
+
+  /* Secondary Palette */
+  --secondary: hsl(var(--secondary-hue), 100%, 50%);
+  --secondary-dark: hsl(var(--secondary-hue), 100%, 35%);
+  --secondary-glow: hsla(var(--secondary-hue), 100%, 50%, 0.4);
+  --secondary-subtle: hsla(var(--secondary-hue), 100%, 50%, 0.12);
+
+  /* Accent & Status */
+  --accent: hsl(var(--accent-hue), 100%, 55%);
+  --accent-glow: hsla(var(--accent-hue), 100%, 55%, 0.4);
+  --accent-subtle: hsla(var(--accent-hue), 100%, 55%, 0.12);
+
+  --neon-green: hsl(var(--emerald-hue), 100%, 48%);
+  --neon-green-glow: hsla(var(--emerald-hue), 100%, 48%, 0.4);
+  --neon-gold: hsl(var(--amber-hue), 100%, 52%);
+  --neon-gold-glow: hsla(var(--amber-hue), 100%, 52%, 0.4);
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  --gradient-accent: linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%);
+  --gradient-cyber: linear-gradient(90deg, var(--secondary) 0%, var(--primary) 50%, var(--accent) 100%);
+  --gradient-gold: linear-gradient(135deg, #ffd700 0%, #ff9900 100%);
+  --gradient-silver: linear-gradient(135deg, #e0e0e0 0%, #9e9e9e 100%);
+  --gradient-bronze: linear-gradient(135deg, #e69138 0%, #a64d79 100%);
+
+  /* Backgrounds & Glass Surfaces */
+  --bg-primary: #06050c;
+  --bg-secondary: #0c091a;
+  --bg-surface: #100d22;
+  --bg-darker: #040306;
+  --glass-bg: rgba(12, 8, 26, 0.75);
+  --glass-bg-hover: rgba(18, 12, 38, 0.85);
+  --glass-border: rgba(139, 92, 246, 0.2);
+  --glass-border-hover: rgba(0, 240, 255, 0.45);
+  --glass-shadow: 0 12px 35px 0 rgba(0, 0, 0, 0.55);
+
+  /* Text Colors */
+  --text-main: #f3effe;
+  --text-secondary: #a9a3c7;
+  --text-muted: #655f84;
+  --text-glow: rgba(243, 239, 254, 0.8);
+
+  /* Typography */
+  --font-display: 'Orbitron', 'Rajdhani', sans-serif;
+  --font-heading: 'Rajdhani', sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Layout Spacing */
+  --space-xs: 0.25rem;   /* 4px */
+  --space-sm: 0.5rem;    /* 8px */
+  --space-md: 1rem;      /* 16px */
+  --space-lg: 1.5rem;    /* 24px */
+  --space-xl: 2rem;      /* 32px */
+  --space-2xl: 3.5rem;   /* 56px */
+
+  /* Border Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Glow Shadows */
+  --glow-primary: 0 0 16px var(--primary-glow);
+  --glow-secondary: 0 0 16px var(--secondary-glow);
+  --glow-accent: 0 0 16px var(--accent-glow);
+  --glow-green: 0 0 16px var(--neon-green-glow);
+  --glow-gold: 0 0 16px var(--neon-gold-glow);
+
+  /* Transitions */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Z-Index Hierarchy */
+  --z-background: -1;
+  --z-base: 1;
+  --z-card: 10;
+  --z-header: 100;
+  --z-modal: 1000;
+  --z-toast: 2000;
+}
