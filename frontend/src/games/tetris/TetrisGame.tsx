@@ -1,1180 +1,518 @@
-import { useEffect, useRef, useState } from 'react'
-import { useAuthStore, API_URL } from '../../store/authStore'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useAuthStore } from '../../store/authStore'
+import { gameApi } from '../../api/gameApi'
 import { soundFx } from '../../services/soundFx'
-
-/**
- * CYBER TETRIS - Cyberarcade Edition
- * Two modes:
- * - Classic: Standard 10x20 board
- * - Ultra: Enhanced 12x24 board with combo system, screen shake, glitch effects
- */
-
-// Standard 7 Tetromino shapes with neon outline colors
-const TETROMINOES: Record<string, { shape: number[][], color: string }> = {
-    I: { shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]], color: '#00d4ff' },
-    O: { shape: [[1, 1], [1, 1]], color: '#fbbf24' },
-    T: { shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]], color: '#a855f7' },
-    S: { shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]], color: '#00f260' },
-    Z: { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: '#ff0055' },
-    J: { shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]], color: '#0575e6' },
-    L: { shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]], color: '#ff6b35' }
-}
-
-type TetrominoType = keyof typeof TETROMINOES
-type Edition = 'classic' | 'ultra'
-
-// Edition configurations
-const EDITION_CONFIG = {
-    classic: { width: 10, height: 20, cellSize: 28 },
-    ultra: { width: 12, height: 24, cellSize: 24 }
-}
-
-// Create empty board - now stores color string
-const createBoard = (rows: number, cols: number): (string | null)[][] =>
-    Array.from({ length: rows }, () => Array(cols).fill(null))
-
-// 7-bag randomizer
-const createBag = (): TetrominoType[] => {
-    const pieces: TetrominoType[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L']
-    for (let i = pieces.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pieces[i], pieces[j]] = [pieces[j], pieces[i]]
-    }
-    return pieces
-}
-
-// Rotate matrix 90 degrees clockwise
-const rotateMatrix = (matrix: number[][]): number[][] => {
-    const N = matrix.length
-    const rotated: number[][] = Array.from({ length: N }, () => Array(N).fill(0))
-    for (let y = 0; y < N; y++) {
-        for (let x = 0; x < N; x++) {
-            rotated[x][N - 1 - y] = matrix[y][x]
-        }
-    }
-    return rotated
-}
-
-// SRS Wall kicks
-const WALL_KICKS: Record<string, number[][]> = {
-    '0>1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-    '1>0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-    '1>2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-    '2>1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-    '2>3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-    '3>2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-    '3>0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-    '0>3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]
-}
-
-const I_WALL_KICKS: Record<string, number[][]> = {
-    '0>1': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
-    '1>0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
-    '1>2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
-    '2>1': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
-    '2>3': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
-    '3>2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
-    '3>0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
-    '0>3': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
-}
-
-interface Piece {
-    type: TetrominoType
-    shape: number[][]
-    color: string
-    x: number
-    y: number
-    rotation: number
-}
-
-interface Particle {
-    x: number
-    y: number
-    vx: number
-    vy: number
-    life: number
-    color: string
-    size: number
-}
+import { GameStatus } from '../../types/game'
+import { GameOverlay } from '../core/GameOverlay'
+import { ParticleEngine } from '../core/ParticleEngine'
+import { useGameInput } from '../core/useGameInput'
+import {
+  TetrominoType,
+  TetrisEdition,
+  TETRIS_EDITIONS,
+  ActivePiece,
+  WALL_KICKS,
+  I_WALL_KICKS,
+  createEmptyBoard,
+  create7Bag,
+  rotateMatrix,
+  isValidPosition,
+  calculateGhostPosition,
+  spawnPiece,
+  clearCompletedLines,
+  getDropInterval
+} from './tetrisEngine'
+import { TetrisRenderer } from './tetrisRenderer'
+import { TetrisPiecePreview } from './TetrisPiecePreview'
 
 export default function TetrisGame() {
-    const canvasRef = useRef<HTMLCanvasElement>(null)
-    const containerRef = useRef<HTMLDivElement>(null)
-    const [gameState, setGameState] = useState<'menu' | 'playing' | 'paused' | 'gameover'>('menu')
-    const [edition, setEdition] = useState<Edition>('classic')
-    const [score, setScore] = useState(0)
-    const [level, setLevel] = useState(1)
-    const [lines, setLines] = useState(0)
-    const [combo, setCombo] = useState(0)
-    const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('tetrisHighScore') || '0'))
+  const { token, updateUserXp } = useAuthStore()
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-    // Edition-dependent config refs
-    const editionRef = useRef(edition)
-    useEffect(() => { editionRef.current = edition }, [edition])
+  // React State
+  const [gameState, setGameState] = useState<GameStatus>('menu')
+  const [edition, setEdition] = useState<TetrisEdition>('classic')
+  const [score, setScore] = useState(0)
+  const [level, setLevel] = useState(1)
+  const [lines, setLines] = useState(0)
+  const [combo, setCombo] = useState(0)
+  const [holdPiece, setHoldPiece] = useState<TetrominoType | null>(null)
+  const [nextPiece, setNextPiece] = useState<TetrominoType | null>(null)
+  const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('tetrisHighScore') || '0', 10))
+  const [isNewRecord, setIsNewRecord] = useState(false)
+  const [xpEarned, setXpEarned] = useState<number | undefined>(undefined)
 
-    // Refs for game state
-    const gameStateRef = useRef(gameState)
-    const scoreRef = useRef(score)
-    const levelRef = useRef(level)
-    const linesRef = useRef(lines)
-    const comboRef = useRef(combo)
-    const highScoreRef = useRef(highScore)
+  // Engine Refs
+  const editionRef = useRef(edition)
+  const gameStateRef = useRef(gameState)
+  const scoreRef = useRef(score)
+  const levelRef = useRef(level)
+  const linesRef = useRef(lines)
+  const comboRef = useRef(combo)
+  const highScoreRef = useRef(highScore)
+  const particleEngineRef = useRef<ParticleEngine>(new ParticleEngine(150))
+  const startTimeRef = useRef<number>(0)
+  const gameDurationRef = useRef<number>(0)
+  const screenShakeRef = useRef<number>(0)
 
-    useEffect(() => { gameStateRef.current = gameState }, [gameState])
-    useEffect(() => { scoreRef.current = score }, [score])
-    useEffect(() => { levelRef.current = level }, [level])
-    useEffect(() => { linesRef.current = lines }, [lines])
-    useEffect(() => { comboRef.current = combo }, [combo])
-    useEffect(() => { highScoreRef.current = highScore }, [highScore])
+  useEffect(() => { editionRef.current = edition }, [edition])
+  useEffect(() => { gameStateRef.current = gameState }, [gameState])
+  useEffect(() => { scoreRef.current = score }, [score])
+  useEffect(() => { levelRef.current = level }, [level])
+  useEffect(() => { linesRef.current = lines }, [lines])
+  useEffect(() => { comboRef.current = combo }, [combo])
+  useEffect(() => { highScoreRef.current = highScore }, [highScore])
 
-    const gameRef = useRef<{
-        board: (string | null)[][]
-        currentPiece: Piece | null
-        holdPiece: TetrominoType | null
-        canHold: boolean
-        bag: TetrominoType[]
-        nextQueue: TetrominoType[]
-        dropCounter: number
-        dropInterval: number
-        lastTime: number
-        animationId: number
-        keys: Record<string, boolean>
-        keyTimers: Record<string, number>
-        running: boolean
-        particles: Particle[]
-        screenShake: number
-        glitchIntensity: number
-        colorShift: number
-        comboTimer: number
-        dangerZone: boolean
-        pulsePhase: number
-        gameStartTime: number
-        cellSize: number
-        boardWidth: number
-        boardHeight: number
-        boardYOffset: number
-        boardRows: number
-        boardCols: number
-        canvasWidth: number
-        canvasHeight: number
-    }>({
-        board: createBoard(20, 10),
-        currentPiece: null,
-        holdPiece: null,
-        canHold: true,
-        bag: [],
-        nextQueue: [],
-        dropCounter: 0,
-        dropInterval: 1000,
-        lastTime: 0,
-        animationId: 0,
-        keys: {},
-        keyTimers: {},
-        running: false,
-        particles: [],
-        screenShake: 0,
-        glitchIntensity: 0,
-        colorShift: 0,
-        comboTimer: 0,
-        dangerZone: false,
-        pulsePhase: 0,
-        gameStartTime: 0,
-        cellSize: 28,
-        boardWidth: 280,
-        boardHeight: 560,
-        boardYOffset: 0,
-        boardRows: 20,
-        boardCols: 10,
-        canvasWidth: 500,
-        canvasHeight: 610
-    })
+  // Simulation State in Ref
+  const simRef = useRef<{
+    board: (string | null)[][]
+    currentPiece: ActivePiece | null
+    hold: TetrominoType | null
+    canHold: boolean
+    bag: TetrominoType[]
+    nextQueue: TetrominoType[]
+    dropCounter: number
+    dropInterval: number
+    lastDropTime: number
+  }>({
+    board: [],
+    currentPiece: null,
+    hold: null,
+    canHold: true,
+    bag: [],
+    nextQueue: [],
+    dropCounter: 0,
+    dropInterval: 1000,
+    lastDropTime: 0
+  })
 
-    // Get next piece from bag
-    const getNextPiece = (): TetrominoType => {
-        const game = gameRef.current
-        if (game.bag.length === 0) {
-            game.bag = createBag()
-        }
-        return game.bag.pop()!
+  const getNextPieceFromBag = useCallback((): TetrominoType => {
+    const sim = simRef.current
+    if (sim.bag.length === 0) {
+      sim.bag = create7Bag()
+    }
+    const next = sim.bag.pop()!
+
+    // Refill queue
+    if (sim.nextQueue.length < 3) {
+      if (sim.bag.length === 0) sim.bag = create7Bag()
+      sim.nextQueue.push(sim.bag.pop()!)
     }
 
-    // Fill next queue
-    const fillNextQueue = () => {
-        const game = gameRef.current
-        while (game.nextQueue.length < 4) {
-            game.nextQueue.push(getNextPiece())
-        }
+    return next
+  }, [])
+
+  const handleGameOver = useCallback(async (finalScore: number) => {
+    soundFx.playGameOver()
+    setGameState('gameover')
+
+    const durationSeconds = Math.max(1, Math.floor((Date.now() - startTimeRef.current) / 1000))
+    gameDurationRef.current = durationSeconds
+
+    if (finalScore > highScoreRef.current) {
+      setHighScore(finalScore)
+      setIsNewRecord(true)
+      localStorage.setItem('tetrisHighScore', finalScore.toString())
+    } else {
+      setIsNewRecord(false)
     }
 
-    // Create piece
-    const createPiece = (type: TetrominoType): Piece => {
-        const tetromino = TETROMINOES[type]
-        return {
-            type,
-            shape: tetromino.shape.map(row => [...row]),
-            color: tetromino.color,
-            x: Math.floor(gameRef.current.boardCols / 2) - Math.floor(tetromino.shape[0].length / 2),
-            y: type === 'I' ? -1 : 0,
-            rotation: 0
+    if (token && finalScore > 0) {
+      try {
+        const res = await gameApi.submitScore({
+          game_slug: 'tetris',
+          score: finalScore,
+          duration_seconds: durationSeconds
+        }, token)
+
+        setXpEarned(res.xp_earned)
+        updateUserXp(res.total_xp, res.level)
+      } catch (err) {
+        console.warn('Failed to transmit score to mainframe:', err)
+      }
+    }
+  }, [token, updateUserXp])
+
+  const lockPiece = useCallback(() => {
+    const sim = simRef.current
+    const piece = sim.currentPiece
+    const config = TETRIS_EDITIONS[editionRef.current]
+
+    if (!piece) return
+
+    // Stamp piece into board
+    for (let r = 0; r < piece.shape.length; r++) {
+      for (let c = 0; c < piece.shape[r].length; c++) {
+        if (piece.shape[r][c] !== 0) {
+          const boardY = piece.y + r
+          const boardX = piece.x + c
+          if (boardY >= 0 && boardY < config.height && boardX >= 0 && boardX < config.width) {
+            sim.board[boardY][boardX] = piece.color
+          }
         }
+      }
     }
 
-    // Spawn new piece
-    const spawnPiece = (): boolean => {
-        const game = gameRef.current
-        fillNextQueue()
-        const type = game.nextQueue.shift()!
-        game.currentPiece = createPiece(type)
-        game.canHold = true
+    soundFx.playImpact()
 
-        // Check danger zone (pieces stacking high)
-        const highestBlock = game.board.findIndex(row => row.some(cell => cell !== null))
-        game.dangerZone = highestBlock >= 0 && highestBlock < 6
+    // Clear Lines
+    const clearResult = clearCompletedLines(sim.board, levelRef.current, comboRef.current)
+    if (clearResult.linesCleared > 0) {
+      const newScore = scoreRef.current + clearResult.pointsEarned
+      const newLines = linesRef.current + clearResult.linesCleared
+      const newLevel = Math.floor(newLines / 10) + 1
+      const newCombo = comboRef.current + 1
 
-        if (!isValidPosition(game.currentPiece, game.board)) {
-            return false
-        }
-        return true
+      setScore(newScore)
+      setLines(newLines)
+      setLevel(newLevel)
+      setCombo(newCombo)
+
+      sim.dropInterval = getDropInterval(newLevel)
+      screenShakeRef.current = clearResult.isTetris ? 12 : 5
+
+      soundFx.playLineClear()
+
+      // Spawn line clear particles
+      for (const rowIdx of clearResult.clearedRowIndices) {
+        particleEngineRef.current.emitExplosion(
+          (config.width * config.cellSize) / 2,
+          rowIdx * config.cellSize,
+          '#00f260',
+          30,
+          5
+        )
+      }
+    } else {
+      setCombo(0)
     }
 
-    // Check valid position
-    const isValidPosition = (piece: Piece, board: (string | null)[][], offsetX = 0, offsetY = 0): boolean => {
-        const cols = gameRef.current.boardCols
-        const rows = gameRef.current.boardRows
-        for (let y = 0; y < piece.shape.length; y++) {
-            for (let x = 0; x < piece.shape[y].length; x++) {
-                if (piece.shape[y][x]) {
-                    const boardX = piece.x + x + offsetX
-                    const boardY = piece.y + y + offsetY
-                    if (boardX < 0 || boardX >= cols || boardY >= rows) return false
-                    if (boardY >= 0 && board[boardY][boardX]) return false
-                }
-            }
-        }
-        return true
+    // Spawn Next Piece
+    const nextType = sim.nextQueue.shift() || getNextPieceFromBag()
+    setNextPiece(sim.nextQueue[0] || null)
+
+    const newPiece = spawnPiece(nextType, config.width)
+    if (!isValidPosition(sim.board, newPiece.shape, newPiece.x, newPiece.y, config.width, config.height)) {
+      handleGameOver(scoreRef.current)
+      return
     }
 
-    // Move piece
-    const movePiece = (dx: number, dy: number): boolean => {
-        const game = gameRef.current
-        if (!game.currentPiece) return false
+    sim.currentPiece = newPiece
+    sim.canHold = true
+  }, [getNextPieceFromBag, handleGameOver])
 
-        if (isValidPosition(game.currentPiece, game.board, dx, dy)) {
-            game.currentPiece.x += dx
-            game.currentPiece.y += dy
-            return true
+  const moveHorizontal = useCallback((dir: -1 | 1) => {
+    const sim = simRef.current
+    const piece = sim.currentPiece
+    const config = TETRIS_EDITIONS[editionRef.current]
+    if (!piece || gameStateRef.current !== 'playing') return
+
+    if (isValidPosition(sim.board, piece.shape, piece.x + dir, piece.y, config.width, config.height)) {
+      piece.x += dir
+      soundFx.playClick()
+    }
+  }, [])
+
+  const rotatePiece = useCallback((clockwise: boolean = true) => {
+    const sim = simRef.current
+    const piece = sim.currentPiece
+    const config = TETRIS_EDITIONS[editionRef.current]
+    if (!piece || gameStateRef.current !== 'playing') return
+
+    const originalShape = piece.shape
+    const rotated = rotateMatrix(originalShape)
+    const newRot = (piece.rotation + (clockwise ? 1 : 3)) % 4
+    const kickKey = `${piece.rotation}>${newRot}`
+    const kickTable = piece.type === 'I' ? I_WALL_KICKS[kickKey] : WALL_KICKS[kickKey]
+
+    if (kickTable) {
+      for (const [kx, ky] of kickTable) {
+        if (isValidPosition(sim.board, rotated, piece.x + kx, piece.y - ky, config.width, config.height)) {
+          piece.shape = rotated
+          piece.x += kx
+          piece.y -= ky
+          piece.rotation = newRot
+          soundFx.playRotate()
+          return
         }
-        return false
+      }
     }
 
-    // Rotate piece with wall kicks
-    const rotatePiece = (direction: 1 | -1) => {
-        const game = gameRef.current
-        if (!game.currentPiece || game.currentPiece.type === 'O') return
+    if (isValidPosition(sim.board, rotated, piece.x, piece.y, config.width, config.height)) {
+      piece.shape = rotated
+      piece.rotation = newRot
+      soundFx.playRotate()
+    }
+  }, [])
 
-        const piece = game.currentPiece
-        const oldRotation = piece.rotation
-        const newRotation = (oldRotation + direction + 4) % 4
+  const softDrop = useCallback(() => {
+    const sim = simRef.current
+    const piece = sim.currentPiece
+    const config = TETRIS_EDITIONS[editionRef.current]
+    if (!piece || gameStateRef.current !== 'playing') return
 
-        let rotated = piece.shape
-        const rotations = direction === 1 ? 1 : 3
-        for (let i = 0; i < rotations; i++) {
-            rotated = rotateMatrix(rotated)
-        }
+    if (isValidPosition(sim.board, piece.shape, piece.x, piece.y + 1, config.width, config.height)) {
+      piece.y += 1
+      setScore(s => s + 1)
+    } else {
+      lockPiece()
+    }
+  }, [lockPiece])
 
-        const kickKey = `${oldRotation}>${newRotation}`
-        const kicks = piece.type === 'I' ? I_WALL_KICKS[kickKey] : WALL_KICKS[kickKey]
+  const hardDrop = useCallback(() => {
+    const sim = simRef.current
+    const piece = sim.currentPiece
+    const config = TETRIS_EDITIONS[editionRef.current]
+    if (!piece || gameStateRef.current !== 'playing') return
 
-        if (kicks) {
-            for (const [kx, ky] of kicks) {
-                const testPiece = { ...piece, shape: rotated, x: piece.x + kx, y: piece.y - ky, rotation: newRotation }
-                if (isValidPosition(testPiece, game.board)) {
-                    game.currentPiece = testPiece
-                    soundFx.playRotate()
-                    return
-                }
-            }
-        }
+    const ghostY = calculateGhostPosition(sim.board, piece, config.width, config.height)
+    const dropDistance = ghostY - piece.y
+    piece.y = ghostY
+    setScore(s => s + dropDistance * 2)
+
+    particleEngineRef.current.emitSparks(
+      piece.x * config.cellSize + (piece.shape[0].length * config.cellSize) / 2,
+      ghostY * config.cellSize + (piece.shape.length * config.cellSize),
+      piece.color,
+      16
+    )
+
+    lockPiece()
+  }, [lockPiece])
+
+  const holdCurrentPiece = useCallback(() => {
+    const sim = simRef.current
+    const piece = sim.currentPiece
+    const config = TETRIS_EDITIONS[editionRef.current]
+    if (!piece || !sim.canHold || gameStateRef.current !== 'playing') return
+
+    soundFx.playRotate()
+    const currentType = piece.type
+
+    if (sim.hold === null) {
+      sim.hold = currentType
+      const nextType = sim.nextQueue.shift() || getNextPieceFromBag()
+      sim.currentPiece = spawnPiece(nextType, config.width)
+      setNextPiece(sim.nextQueue[0] || null)
+    } else {
+      const prevHold = sim.hold
+      sim.hold = currentType
+      sim.currentPiece = spawnPiece(prevHold, config.width)
     }
 
-    // Lock piece to board
-    const lockPiece = () => {
-        const game = gameRef.current
-        if (!game.currentPiece) return
+    setHoldPiece(sim.hold)
+    sim.canHold = false
+  }, [getNextPieceFromBag])
 
-        for (let y = 0; y < game.currentPiece.shape.length; y++) {
-            for (let x = 0; x < game.currentPiece.shape[y].length; x++) {
-                if (game.currentPiece.shape[y][x]) {
-                    const boardY = game.currentPiece.y + y
-                    const boardX = game.currentPiece.x + x
-                    if (boardY >= 0 && boardY < game.boardRows) {
-                        game.board[boardY][boardX] = game.currentPiece.color
-                    }
-                }
-            }
-        }
-        game.currentPiece = null
+  // Keyboard input
+  useGameInput({
+    onKeyDown: (key) => {
+      if (gameStateRef.current === 'menu' || gameStateRef.current === 'gameover') return
+
+      if (key === 'Escape') {
+        if (gameStateRef.current === 'playing') setGameState('paused')
+        else if (gameStateRef.current === 'paused') setGameState('playing')
+        return
+      }
+
+      if (gameStateRef.current !== 'playing') return
+
+      if (key === 'ArrowLeft' || key === 'a' || key === 'A') moveHorizontal(-1)
+      else if (key === 'ArrowRight' || key === 'd' || key === 'D') moveHorizontal(1)
+      else if (key === 'ArrowDown' || key === 's' || key === 'S') softDrop()
+      else if (key === ' ' || key === 'Space') hardDrop()
+      else if (key === 'ArrowUp' || key === 'w' || key === 'W' || key === 'x' || key === 'X') rotatePiece(true)
+      else if (key === 'z' || key === 'Z' || key === 'Control') rotatePiece(false)
+      else if (key === 'c' || key === 'C' || key === 'Shift') holdCurrentPiece()
+    }
+  }, gameState === 'playing' || gameState === 'paused')
+
+  const initGame = useCallback(() => {
+    const config = TETRIS_EDITIONS[editionRef.current]
+    const initialBag = create7Bag()
+    const firstPieceType = initialBag.pop()!
+    const queue = [initialBag.pop()!, initialBag.pop()!, initialBag.pop()!]
+
+    simRef.current = {
+      board: createEmptyBoard(config.height, config.width),
+      currentPiece: spawnPiece(firstPieceType, config.width),
+      hold: null,
+      canHold: true,
+      bag: initialBag,
+      nextQueue: queue,
+      dropCounter: 0,
+      dropInterval: getDropInterval(1),
+      lastDropTime: performance.now()
     }
 
-    // Create explosion particles
-    const createParticles = (x: number, y: number, color: string, count: number, explosive = false) => {
-        const game = gameRef.current
-        const cellSize = game.cellSize
-        for (let i = 0; i < count; i++) {
-            const angle = (Math.PI * 2 / count) * i + Math.random() * 0.5
-            const speed = explosive ? 8 + Math.random() * 8 : 3 + Math.random() * 4
-            game.particles.push({
-                x: x + Math.random() * cellSize,
-                y: y + Math.random() * cellSize,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 2,
-                life: 1,
-                color,
-                size: explosive ? 4 + Math.random() * 4 : 2 + Math.random() * 3
-            })
-        }
-    }
+    particleEngineRef.current.clear()
+    setScore(0)
+    setLevel(1)
+    setLines(0)
+    setCombo(0)
+    setHoldPiece(null)
+    setNextPiece(queue[0])
+    setXpEarned(undefined)
+    startTimeRef.current = Date.now()
+    setGameState('playing')
+  }, [])
+
+  // 60FPS Game Loop
+  useEffect(() => {
+    let animId: number
+    let lastTime = performance.now()
 
-    // Clear completed lines with effects
-    const clearLines = () => {
-        const game = gameRef.current
-        const linesToClear: number[] = []
-        const rows = game.boardRows
-        const cols = game.boardCols
-        const cellSize = game.cellSize
-        const boardYOffset = game.boardYOffset
-
-        for (let y = rows - 1; y >= 0; y--) {
-            if (game.board[y].every(cell => cell !== null)) {
-                linesToClear.push(y)
-                // Create particles for cleared line
-                for (let x = 0; x < cols; x++) {
-                    createParticles(x * cellSize, boardYOffset + y * cellSize, game.board[y][x]!, 5, true)
-                }
-            }
-        }
-
-        if (linesToClear.length > 0) {
-            soundFx.playLineClear()
-            // Screen shake based on lines cleared
-            game.screenShake = linesToClear.length * 4
-
-            // Glitch effect for 4-line clears (TETRIS!)
-            if (linesToClear.length >= 4) {
-                game.glitchIntensity = 1
-            }
-
-            // Remove lines
-            linesToClear.sort((a, b) => b - a).forEach(y => {
-                game.board.splice(y, 1)
-                game.board.unshift(Array(cols).fill(null))
-            })
-
-            // Combo system
-            setCombo(prev => {
-                const newCombo = prev + 1
-                game.comboTimer = 3000  // 3 second combo window
-                return newCombo
-            })
-
-            // Scoring with combo multiplier
-            const basePoints = [0, 100, 300, 500, 800][linesToClear.length]
-            const comboMultiplier = 1 + (comboRef.current * 0.5)
-            const points = Math.floor(basePoints * levelRef.current * comboMultiplier)
-
-            setScore(prev => prev + points)
-            setLines(prev => {
-                const newLines = prev + linesToClear.length
-                const newLevel = Math.floor(newLines / 10) + 1
-                if (newLevel > levelRef.current) {
-                    setLevel(newLevel)
-                    soundFx.playFanfare()
-                    game.dropInterval = Math.max(80, 1000 - (newLevel - 1) * 80)
-                }
-                return newLines
-            })
-        } else {
-            // No lines cleared - reset combo if timer expired
-            if (comboRef.current > 0) {
-                setCombo(0)
-            }
-        }
-    }
-
-    // Hard drop
-    const hardDrop = () => {
-        const game = gameRef.current
-        if (!game.currentPiece) return
-
-        let dropDistance = 0
-        while (movePiece(0, 1)) {
-            dropDistance++
-        }
-
-        // Create impact particles
-        for (let x = 0; x < game.currentPiece.shape[0].length; x++) {
-            for (let y = game.currentPiece.shape.length - 1; y >= 0; y--) {
-                if (game.currentPiece.shape[y][x]) {
-                    createParticles(
-                        (game.currentPiece.x + x) * game.cellSize,
-                        game.boardYOffset + (game.currentPiece.y + y) * game.cellSize + game.cellSize,
-                        game.currentPiece.color,
-                        3
-                    )
-                    break
-                }
-            }
-        }
-
-        soundFx.playImpact()
-        game.screenShake = 3
-        setScore(prev => prev + dropDistance * 2)
-        lockPiece()
-        clearLines()
-        if (!spawnPiece()) {
-            endGame()
-        }
-    }
-
-    // Hold piece
-    const holdPiece = () => {
-        const game = gameRef.current
-        if (!game.currentPiece || !game.canHold) return
-
-        soundFx.playRotate()
-        const currentType = game.currentPiece.type
-        if (game.holdPiece) {
-            game.currentPiece = createPiece(game.holdPiece)
-        } else {
-            if (!spawnPiece()) {
-                endGame()
-                return
-            }
-        }
-        game.holdPiece = currentType
-        game.canHold = false
-    }
-
-    // End game
-    const endGame = () => {
-        const game = gameRef.current
-        game.running = false
-        game.glitchIntensity = 1
-        soundFx.playExplosion()
-        cancelAnimationFrame(game.animationId)
-
-        const finalScore = scoreRef.current
-        if (finalScore > highScoreRef.current) {
-            setHighScore(finalScore)
-            localStorage.setItem('tetrisHighScore', finalScore.toString())
-        }
-
-        // Submit score to backend if logged in
-        const token = useAuthStore.getState().token
-        if (token) {
-            const duration = Math.floor((performance.now() - game.gameStartTime) / 1000)
-            fetch(`${API_URL}/leaderboard/submit`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    game_slug: 'tetris',
-                    score: finalScore,
-                    duration_seconds: duration > 0 ? duration : 1
-                })
-            }).catch(err => console.error('Failed to submit score:', err))
-        }
-
-        setGameState('gameover')
-    }
-
-    // Get ghost Y position
-    const getGhostY = (): number => {
-        const game = gameRef.current
-        if (!game.currentPiece) return 0
-
-        let ghostY = game.currentPiece.y
-        while (isValidPosition(game.currentPiece, game.board, 0, ghostY - game.currentPiece.y + 1)) {
-            ghostY++
-        }
-        return ghostY
-    }
-
-    // Shift color hue
-    const shiftHue = (color: string, shift: number): string => {
-        const num = parseInt(color.replace('#', ''), 16)
-        let r = (num >> 16) & 255
-        let g = (num >> 8) & 255
-        let b = num & 255
-
-        // Simple hue rotation
-        const temp = r
-        r = Math.floor((r * Math.cos(shift) + g * Math.sin(shift)) % 256)
-        g = Math.floor((g * Math.cos(shift) + b * Math.sin(shift)) % 256)
-        b = Math.floor((b * Math.cos(shift) + temp * Math.sin(shift)) % 256)
-
-        r = Math.max(0, Math.min(255, Math.abs(r)))
-        g = Math.max(0, Math.min(255, Math.abs(g)))
-        b = Math.max(0, Math.min(255, Math.abs(b)))
-
-        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
-    }
-
-    // Draw cyberpunk block - BLACK with neon outline
-    const drawBlock = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, size?: number, alpha: number = 1, isGhost = false) => {
-        const game = gameRef.current
-        ctx.globalAlpha = alpha
-
-        // Apply color shift if active
-        let displayColor = color
-        if (game.colorShift > 0) {
-            displayColor = shiftHue(color, game.colorShift)
-        }
-
-        const padding = 1
-        const outlineWidth = 3
-        const blockSize = size !== undefined ? size : game.cellSize - 2
-
-        if (isGhost) {
-            // Ghost piece - just outline
-            ctx.strokeStyle = displayColor
-            ctx.lineWidth = 2
-            ctx.strokeRect(x + padding + 2, y + padding + 2, blockSize - 4, blockSize - 4)
-            ctx.globalAlpha = 1
-            return
-        }
-
-        // NEON GLOW - outer
-        ctx.shadowBlur = 15
-        ctx.shadowColor = displayColor
-
-        // BLACK inner fill
-        ctx.fillStyle = '#0a0a0f'
-        ctx.fillRect(x + padding, y + padding, blockSize, blockSize)
-
-        // NEON OUTLINE - multiple layers for glow effect
-        ctx.shadowBlur = 20
-        ctx.strokeStyle = displayColor
-        ctx.lineWidth = outlineWidth
-        ctx.strokeRect(x + padding + outlineWidth / 2, y + padding + outlineWidth / 2, blockSize - outlineWidth, blockSize - outlineWidth)
-
-        // Inner glow line
-        ctx.shadowBlur = 8
-        ctx.strokeStyle = displayColor
-        ctx.lineWidth = 1.5
-        ctx.strokeRect(x + padding + 6, y + padding + 6, blockSize - 12, blockSize - 12)
-
-        // Corner accents (cyberpunk style)
-        ctx.fillStyle = displayColor
-        ctx.shadowBlur = 10
-        // Top-left
-        ctx.fillRect(x + padding, y + padding, 6, 2)
-        ctx.fillRect(x + padding, y + padding, 2, 6)
-        // Top-right
-        ctx.fillRect(x + blockSize - 5, y + padding, 6, 2)
-        ctx.fillRect(x + blockSize - 1, y + padding, 2, 6)
-        // Bottom-left
-        ctx.fillRect(x + padding, y + blockSize - 1, 6, 2)
-        ctx.fillRect(x + padding, y + blockSize - 5, 2, 6)
-        // Bottom-right
-        ctx.fillRect(x + blockSize - 5, y + blockSize - 1, 6, 2)
-        ctx.fillRect(x + blockSize - 1, y + blockSize - 5, 2, 6)
-
-        // Scanlines (subtle CRT effect)
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'
-        for (let sy = 0; sy < blockSize; sy += 2) {
-            ctx.fillRect(x + padding, y + padding + sy, blockSize, 1)
-        }
-
-        // Inner highlight pulse (if in danger zone)
-        if (game.dangerZone) {
-            const pulse = Math.sin(game.pulsePhase * 5) * 0.3 + 0.3
-            ctx.fillStyle = `rgba(255, 0, 85, ${pulse * 0.2})`
-            ctx.fillRect(x + padding + 4, y + padding + 4, blockSize - 8, blockSize - 8)
-        }
-
-        ctx.shadowBlur = 0
-        ctx.globalAlpha = 1
-    }
-
-    // Draw mini piece for preview
-    const drawMiniPiece = (ctx: CanvasRenderingContext2D, type: TetrominoType, x: number, y: number, cellSize: number) => {
-        const tetromino = TETROMINOES[type]
-        const shape = tetromino.shape
-        const offsetX = (4 - shape[0].length) * cellSize / 2
-        const offsetY = type === 'I' ? -cellSize / 2 : 0
-
-        for (let py = 0; py < shape.length; py++) {
-            for (let px = 0; px < shape[py].length; px++) {
-                if (shape[py][px]) {
-                    drawBlock(ctx, x + offsetX + px * cellSize, y + offsetY + py * cellSize, tetromino.color, cellSize - 2)
-                }
-            }
-        }
-    }
-
-    // Main draw function
-    const draw = (ctx: CanvasRenderingContext2D, _time: number) => {
-        const game = gameRef.current
-        const boardWidth = game.boardWidth
-        const boardHeight = game.boardHeight
-        const boardYOffset = game.boardYOffset
-        const cellSize = game.cellSize
-        const boardRows = game.boardRows
-        const boardCols = game.boardCols
-        const panelWidth = 180
-        const totalWidth = boardWidth + panelWidth + 20
-        const totalHeight = game.canvasHeight
-
-        // Update effects
-        game.pulsePhase += 0.05
-        if (game.screenShake > 0) game.screenShake *= 0.9
-        if (game.glitchIntensity > 0) game.glitchIntensity *= 0.95
-        if (game.colorShift > 0) game.colorShift *= 0.98
-        if (game.comboTimer > 0) {
-            game.comboTimer -= 16
-            if (game.comboTimer <= 0 && comboRef.current > 0) {
-                setCombo(0)
-            }
-        }
-
-        // Apply screen shake
-        ctx.save()
-        if (game.screenShake > 0.5) {
-            ctx.translate(
-                (Math.random() - 0.5) * game.screenShake * 2,
-                (Math.random() - 0.5) * game.screenShake * 2
-            )
-        }
-
-        // Clear with dark background
-        ctx.fillStyle = '#030308'
-        ctx.fillRect(-10, -10, totalWidth + 20, totalHeight + 20)
-
-        // Draw board background with gradient
-        const bgGradient = ctx.createLinearGradient(0, boardYOffset, 0, boardYOffset + boardHeight)
-        bgGradient.addColorStop(0, '#0a0a12')
-        bgGradient.addColorStop(0.5, '#0f0f1a')
-        bgGradient.addColorStop(1, '#0a0a12')
-        ctx.fillStyle = bgGradient
-        ctx.fillRect(0, boardYOffset, boardWidth, boardHeight)
-
-        // Danger zone red tint
-        if (game.dangerZone) {
-            const dangerAlpha = Math.sin(game.pulsePhase * 3) * 0.1 + 0.1
-            ctx.fillStyle = `rgba(255, 0, 85, ${dangerAlpha})`
-            ctx.fillRect(0, boardYOffset, boardWidth, cellSize * 6)
-        }
-
-        // Draw grid with neon accent
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.06)'
-        ctx.lineWidth = 1
-        for (let x = 0; x <= boardCols; x++) {
-            ctx.beginPath()
-            ctx.moveTo(x * cellSize, boardYOffset)
-            ctx.lineTo(x * cellSize, boardYOffset + boardHeight)
-            ctx.stroke()
-        }
-        for (let y = 0; y <= boardRows; y++) {
-            ctx.beginPath()
-            ctx.moveTo(0, boardYOffset + y * cellSize)
-            ctx.lineTo(boardWidth, boardYOffset + y * cellSize)
-            ctx.stroke()
-        }
-
-        // Draw placed blocks
-        for (let y = 0; y < boardRows; y++) {
-            for (let x = 0; x < boardCols; x++) {
-                if (game.board[y][x]) {
-                    drawBlock(ctx, x * cellSize, boardYOffset + y * cellSize, game.board[y][x]!)
-                }
-            }
-        }
-
-        // Draw ghost piece
-        if (game.currentPiece) {
-            const ghostY = getGhostY()
-            for (let y = 0; y < game.currentPiece.shape.length; y++) {
-                for (let x = 0; x < game.currentPiece.shape[y].length; x++) {
-                    if (game.currentPiece.shape[y][x]) {
-                        const drawY = ghostY + y
-                        if (drawY >= 0) {
-                            drawBlock(ctx, (game.currentPiece.x + x) * cellSize, boardYOffset + drawY * cellSize, game.currentPiece.color, cellSize - 2, 0.4, true)
-                        }
-                    }
-                }
-            }
-
-            // Draw current piece
-            for (let y = 0; y < game.currentPiece.shape.length; y++) {
-                for (let x = 0; x < game.currentPiece.shape[y].length; x++) {
-                    if (game.currentPiece.shape[y][x]) {
-                        const drawY = game.currentPiece.y + y
-                        if (drawY >= 0) {
-                            drawBlock(ctx, (game.currentPiece.x + x) * cellSize, boardYOffset + drawY * cellSize, game.currentPiece.color)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Draw particles
-        game.particles = game.particles.filter(p => p.life > 0)
-        game.particles.forEach(p => {
-            p.x += p.vx
-            p.y += p.vy
-            p.vy += 0.3
-            p.vx *= 0.99
-            p.life -= 0.02
-            ctx.globalAlpha = p.life
-            ctx.shadowBlur = 8
-            ctx.shadowColor = p.color
-            ctx.fillStyle = p.color
-            ctx.fillRect(p.x, p.y, p.size, p.size)
-        })
-        ctx.globalAlpha = 1
-        ctx.shadowBlur = 0
-
-        // Glitch effect overlay
-        if (game.glitchIntensity > 0.1) {
-            ctx.fillStyle = `rgba(255, 0, 85, ${game.glitchIntensity * 0.3})`
-            const sliceHeight = 5 + Math.random() * 20
-            for (let i = 0; i < 5; i++) {
-                const y = boardYOffset + Math.random() * boardHeight
-                ctx.fillRect(0, y, boardWidth, sliceHeight)
-            }
-        }
-
-        // Board border with intense glow
-        ctx.shadowBlur = 25
-        ctx.shadowColor = game.dangerZone ? '#ff0055' : '#00f260'
-        ctx.strokeStyle = game.dangerZone ? '#ff0055' : '#00f260'
-        ctx.lineWidth = 3
-        ctx.strokeRect(1, boardYOffset + 1, boardWidth - 2, boardHeight - 2)
-        ctx.shadowBlur = 0
-
-        // === SIDE PANEL ===
-        const panelX = boardWidth + 15
-
-        // Next pieces (show 4)
-        ctx.fillStyle = 'rgba(10, 10, 20, 0.9)'
-        ctx.fillRect(panelX, 10, panelWidth - 10, 240)
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)'
-        ctx.lineWidth = 1
-        ctx.strokeRect(panelX, 10, panelWidth - 10, 240)
-
-        ctx.fillStyle = '#00f260'
-        ctx.font = 'bold 14px Rajdhani, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('NEXT', panelX + (panelWidth - 10) / 2, 30)
-
-        game.nextQueue.slice(0, 4).forEach((type, i) => {
-            drawMiniPiece(ctx, type, panelX + 25, 45 + i * 50, 16)
-        })
-
-        // Hold piece
-        ctx.fillStyle = 'rgba(10, 10, 20, 0.9)'
-        ctx.fillRect(panelX, 260, panelWidth - 10, 70)
-        ctx.strokeStyle = game.canHold ? 'rgba(0, 255, 255, 0.4)' : 'rgba(255, 0, 85, 0.4)'
-        ctx.strokeRect(panelX, 260, panelWidth - 10, 70)
-
-        ctx.fillStyle = game.canHold ? '#00f260' : '#ff0055'
-        ctx.font = 'bold 12px Rajdhani, sans-serif'
-        ctx.fillText('HOLD [C]', panelX + (panelWidth - 10) / 2, 278)
-
-        if (game.holdPiece) {
-            ctx.globalAlpha = game.canHold ? 1 : 0.4
-            drawMiniPiece(ctx, game.holdPiece, panelX + 25, 290, 16)
-            ctx.globalAlpha = 1
-        }
-
-        // Stats
-        const drawStat = (label: string, value: string, y: number, color = '#00f260', highlight = false) => {
-            ctx.fillStyle = highlight ? 'rgba(255, 0, 85, 0.2)' : 'rgba(10, 10, 20, 0.9)'
-            ctx.fillRect(panelX, y, panelWidth - 10, 45)
-            ctx.strokeStyle = highlight ? 'rgba(255, 0, 85, 0.5)' : 'rgba(0, 255, 255, 0.3)'
-            ctx.strokeRect(panelX, y, panelWidth - 10, 45)
-
-            ctx.fillStyle = '#94a3b8'
-            ctx.font = '10px Rajdhani, sans-serif'
-            ctx.textAlign = 'center'
-            ctx.fillText(label, panelX + (panelWidth - 10) / 2, y + 15)
-
-            ctx.fillStyle = color
-            ctx.font = 'bold 20px Rajdhani, sans-serif'
-            ctx.shadowBlur = highlight ? 10 : 0
-            ctx.shadowColor = color
-            ctx.fillText(value, panelX + (panelWidth - 10) / 2, y + 38)
-            ctx.shadowBlur = 0
-        }
-
-        drawStat('SCORE', scoreRef.current.toLocaleString(), 340)
-        drawStat('LEVEL', levelRef.current.toString(), 395)
-        drawStat('LINES', linesRef.current.toString(), 450)
-
-        // Combo display with highlight
-        if (comboRef.current > 1) {
-            drawStat('COMBO', `x${comboRef.current}`, 505, '#ff0055', true)
-        } else {
-            drawStat('COMBO', '-', 505)
-        }
-
-        drawStat('HIGH', highScoreRef.current.toLocaleString(), 560, '#fbbf24')
-
-        ctx.restore()
-    }
-
-    // Game loop
     const gameLoop = (time: number) => {
-        const game = gameRef.current
-        if (!game.running) return
+      const dt = time - lastTime
+      lastTime = time
 
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      const sim = simRef.current
+      const config = TETRIS_EDITIONS[editionRef.current]
 
-        const dt = time - game.lastTime
-        game.lastTime = time
+      if (canvas && ctx) {
+        if (gameStateRef.current === 'playing' && sim.currentPiece) {
+          sim.dropCounter += dt
 
-        // Handle key repeats
-        const repeatDelay = 170
-        const repeatRate = 50
-
-        // Left
-        if (game.keys['arrowleft'] || game.keys['a']) {
-            if (!game.keyTimers['left']) {
-                game.keyTimers['left'] = time
-                movePiece(-1, 0)
-            } else if (time - game.keyTimers['left'] > repeatDelay) {
-                if (!game.keyTimers['leftRepeat'] || time - game.keyTimers['leftRepeat'] > repeatRate) {
-                    game.keyTimers['leftRepeat'] = time
-                    movePiece(-1, 0)
-                }
+          if (sim.dropCounter >= sim.dropInterval) {
+            sim.dropCounter = 0
+            if (isValidPosition(sim.board, sim.currentPiece.shape, sim.currentPiece.x, sim.currentPiece.y + 1, config.width, config.height)) {
+              sim.currentPiece.y += 1
+            } else {
+              lockPiece()
             }
-        } else {
-            game.keyTimers['left'] = 0
-            game.keyTimers['leftRepeat'] = 0
+          }
+
+          if (screenShakeRef.current > 0) {
+            screenShakeRef.current *= 0.9
+            if (screenShakeRef.current < 0.2) screenShakeRef.current = 0
+          }
+
+          particleEngineRef.current.update()
         }
 
-        // Right
-        if (game.keys['arrowright'] || game.keys['d']) {
-            if (!game.keyTimers['right']) {
-                game.keyTimers['right'] = time
-                movePiece(1, 0)
-            } else if (time - game.keyTimers['right'] > repeatDelay) {
-                if (!game.keyTimers['rightRepeat'] || time - game.keyTimers['rightRepeat'] > repeatRate) {
-                    game.keyTimers['rightRepeat'] = time
-                    movePiece(1, 0)
-                }
-            }
-        } else {
-            game.keyTimers['right'] = 0
-            game.keyTimers['rightRepeat'] = 0
-        }
+        // Calculate Ghost Position
+        const ghostY = sim.currentPiece
+          ? calculateGhostPosition(sim.board, sim.currentPiece, config.width, config.height)
+          : 0
 
-        // Soft drop
-        if (game.keys['arrowdown'] || game.keys['s']) {
-            if (!game.keyTimers['down'] || time - game.keyTimers['down'] > 40) {
-                game.keyTimers['down'] = time
-                if (movePiece(0, 1)) {
-                    setScore(prev => prev + 1)
-                }
-            }
-        } else {
-            game.keyTimers['down'] = 0
-        }
+        // Render Frame
+        TetrisRenderer.renderScene(
+          ctx,
+          sim.board,
+          sim.currentPiece,
+          ghostY,
+          config,
+          particleEngineRef.current,
+          screenShakeRef.current
+        )
+      }
 
-        // Auto drop
-        game.dropCounter += dt
-        if (game.dropCounter >= game.dropInterval) {
-            game.dropCounter = 0
-            if (!movePiece(0, 1)) {
-                lockPiece()
-                clearLines()
-                if (!spawnPiece()) {
-                    endGame()
-                    return
-                }
-            }
-        }
-
-        draw(ctx, time)
-        game.animationId = requestAnimationFrame(gameLoop)
+      animId = requestAnimationFrame(gameLoop)
     }
 
-    const [isFullscreen, setIsFullscreen] = useState(false)
+    animId = requestAnimationFrame(gameLoop)
+    return () => cancelAnimationFrame(animId)
+  }, [lockPiece])
 
-    const toggleFullscreen = () => {
-        const container = containerRef.current
-        if (!container) return
-        if (!document.fullscreenElement) {
-            container.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { })
-        } else {
-            document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { })
-        }
-    }
+  const config = TETRIS_EDITIONS[edition]
 
-    // Fullscreen change listener
-    useEffect(() => {
-        const handler = () => {
-            setIsFullscreen(!!document.fullscreenElement)
-            // Trigger resize calculation since dimensions changed
-            setTimeout(resizeCanvas, 50)
-        }
-        document.addEventListener('fullscreenchange', handler)
-        return () => document.removeEventListener('fullscreenchange', handler)
-    }, [])
+  return (
+    <div className="tetris-container">
+      <div className="tetris-layout-grid">
+        {/* Left Side: Hold Queue & Controls */}
+        <div className="tetris-hud-panel">
+          <TetrisPiecePreview type={holdPiece} label="HOLD" />
 
-    const resizeCanvas = () => {
-        const canvas = canvasRef.current
-        const container = containerRef.current
-        if (!canvas || !container) return
+          <div className="tetris-stat-card">
+            <span className="tetris-stat-label">LINES</span>
+            <span className="tetris-stat-value">{lines}</span>
+          </div>
 
-        const game = gameRef.current
-        const config = EDITION_CONFIG[editionRef.current]
-        game.boardRows = config.height
-        game.boardCols = config.width
+          <div className="tetris-stat-card">
+            <span className="tetris-stat-label">LEVEL</span>
+            <span className="tetris-stat-value" style={{ color: 'var(--neon-pink)' }}>{level}</span>
+          </div>
+        </div>
 
-        const brandHeight = 90
-        const padding = 40
-        const availableHeight = (container.clientHeight || window.innerHeight) - brandHeight - padding
+        {/* Center: Main Matrix Canvas */}
+        <div className="tetris-matrix-wrapper">
+          <canvas
+            ref={canvasRef}
+            width={config.width * config.cellSize}
+            height={config.height * config.cellSize}
+            className="game-canvas"
+          />
 
-        let cellSize = Math.floor(availableHeight / game.boardRows)
-        cellSize = Math.max(18, Math.min(cellSize, 40))
-
-        const boardHeight = game.boardRows * cellSize
-        const canvasHeight = Math.max(610, boardHeight)
-        const boardYOffset = Math.floor((canvasHeight - boardHeight) / 2)
-
-        const boardWidth = game.boardCols * cellSize
-        const panelWidth = 180
-        const canvasWidth = boardWidth + panelWidth + 20
-
-        const dpr = window.devicePixelRatio || 1
-        canvas.width = canvasWidth * dpr
-        canvas.height = canvasHeight * dpr
-        canvas.style.width = canvasWidth + 'px'
-        canvas.style.height = canvasHeight + 'px'
-
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-            ctx.resetTransform()
-            ctx.scale(dpr, dpr)
-        }
-
-        game.cellSize = cellSize
-        game.boardWidth = boardWidth
-        game.boardHeight = boardHeight
-        game.boardYOffset = boardYOffset
-        game.canvasWidth = canvasWidth
-        game.canvasHeight = canvasHeight
-
-        if (!game.running && ctx) {
-            draw(ctx, performance.now())
-        }
-    }
-
-    useEffect(() => {
-        window.addEventListener('resize', resizeCanvas)
-        return () => window.removeEventListener('resize', resizeCanvas)
-    }, [])
-
-    useEffect(() => {
-        resizeCanvas()
-    }, [edition])
-
-    // Start game
-    const startGame = () => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-
-        const game = gameRef.current
-        const config = EDITION_CONFIG[editionRef.current]
-        game.boardRows = config.height
-        game.boardCols = config.width
-
-        resizeCanvas()
-
-        game.board = createBoard(game.boardRows, game.boardCols)
-        game.bag = createBag()
-        game.nextQueue = []
-        game.holdPiece = null
-        game.canHold = true
-        game.dropCounter = 0
-        game.dropInterval = 1000
-        game.lastTime = performance.now()
-        game.particles = []
-        game.screenShake = 0
-        game.glitchIntensity = 0
-        game.colorShift = 0
-        game.comboTimer = 0
-        game.dangerZone = false
-        game.gameStartTime = performance.now()
-        game.running = true
-
-        setScore(0)
-        setLevel(1)
-        setLines(0)
-        setCombo(0)
-
-        fillNextQueue()
-        spawnPiece()
-        setGameState('playing')
-        game.animationId = requestAnimationFrame(gameLoop)
-    }
-
-    // Keyboard handlers
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const key = e.key.toLowerCase()
-            const game = gameRef.current
-            game.keys[key] = true
-
-            if (gameStateRef.current === 'playing') {
-                if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'w', 'a', 's', 'd'].includes(key)) {
-                    e.preventDefault()
-                }
-
-                if ((key === 'arrowup' || key === 'w' || key === 'x') && !e.repeat) {
-                    rotatePiece(1)
-                }
-                if ((key === 'z' || key === 'control') && !e.repeat) {
-                    rotatePiece(-1)
-                }
-                if (key === ' ' && !e.repeat) {
-                    hardDrop()
-                }
-                if ((key === 'c' || key === 'shift') && !e.repeat) {
-                    holdPiece()
-                }
-                // Rainbow mode - G key
-                if (key === 'g') {
-                    game.colorShift = Math.PI
-                }
-                if (key === 'escape' || key === 'p') {
-                    game.running = false
-                    cancelAnimationFrame(game.animationId)
-                    setGameState('paused')
-                }
-            }
-
-            if (gameStateRef.current === 'paused' && (key === 'escape' || key === 'p')) {
-                game.running = true
-                game.lastTime = performance.now()
-                game.animationId = requestAnimationFrame(gameLoop)
-                setGameState('playing')
-            }
-        }
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            gameRef.current.keys[e.key.toLowerCase()] = false
-        }
-
-        window.addEventListener('keydown', handleKeyDown)
-        window.addEventListener('keyup', handleKeyUp)
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown)
-            window.removeEventListener('keyup', handleKeyUp)
-            gameRef.current.running = false
-            cancelAnimationFrame(gameRef.current.animationId)
-        }
-    }, [])
-
-    return (
-        <div ref={containerRef} className="tetris-container">
-            <div className="game-wrapper">
-                <div className="game-brand">
-                    <h1>CYBER TETRIS</h1>
-                    <span>{edition === 'ultra' ? 'ULTRA EDITION' : 'CLASSIC EDITION'}</span>
+          {/* Standardized Glassmorphic Overlay */}
+          <GameOverlay
+            status={gameState}
+            title="CYBER TETRIS"
+            subtitle="QUANTUM MATRIX SIMULATOR"
+            score={score}
+            highScore={highScore}
+            isNewRecord={isNewRecord}
+            xpEarned={xpEarned}
+            stats={[
+              { label: 'Total Lines Cleared', value: lines },
+              { label: 'Highest Matrix Level', value: level },
+              { label: 'Max Combo Streak', value: `x${combo}` },
+              { label: 'Simulation Time', value: `${gameDurationRef.current}s` }
+            ]}
+            onStart={initGame}
+            onResume={() => setGameState('playing')}
+            onRestart={initGame}
+            startBtnText={gameState === 'menu' ? 'START MATRIX' : 'RETRY MATRIX'}
+            accentColor="#00f260"
+          >
+            {gameState === 'menu' && (
+              <>
+                <div className="edition-select">
+                  <button
+                    className={`edition-btn ${edition === 'classic' ? 'active' : ''}`}
+                    onClick={() => setEdition('classic')}
+                  >
+                    CLASSIC (10x20)
+                  </button>
+                  <button
+                    className={`edition-btn ${edition === 'ultra' ? 'active' : ''}`}
+                    onClick={() => setEdition('ultra')}
+                  >
+                    ULTRA (12x24)
+                  </button>
                 </div>
 
-                <canvas ref={canvasRef} className="game-canvas" />
-
-                {/* Menu */}
-                {gameState === 'menu' && (
-                    <div className="overlay">
-                        <h2>CYBER TETRIS</h2>
-                        <div className="edition-select">
-                            <button
-                                className={`edition-btn ${edition === 'classic' ? 'active' : ''}`}
-                                onClick={() => setEdition('classic')}
-                            >
-                                CLASSIC
-                            </button>
-                            <button
-                                className={`edition-btn ${edition === 'ultra' ? 'active' : ''}`}
-                                onClick={() => setEdition('ultra')}
-                            >
-                                ULTRA
-                            </button>
-                        </div>
-                        <div className="subtitle">{edition === 'ultra' ? 'Enhanced Mode' : 'Standard 10x20'}</div>
-                        <div className="features">
-                            {edition === 'ultra' ? (
-                                <>
-                                    <span>🎮 12x24 Board</span>
-                                    <span>⚡ Combo System</span>
-                                    <span>💥 Screen Shake</span>
-                                    <span>🌈 Glitch FX</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span>🎮 10x20 Board</span>
-                                    <span>📊 Classic Scoring</span>
-                                    <span>🎯 Pure Gameplay</span>
-                                </>
-                            )}
-                        </div>
-                        <div className="controls-grid">
-                            <div className="control-row"><span className="k-box">← →</span><span>Move</span></div>
-                            <div className="control-row"><span className="k-box">↑</span><span>Rotate</span></div>
-                            <div className="control-row"><span className="k-box">↓</span><span>Soft Drop</span></div>
-                            <div className="control-row"><span className="k-box">Space</span><span>Hard Drop</span></div>
-                            <div className="control-row"><span className="k-box">C</span><span>Hold</span></div>
-                            <div className="control-row"><span className="k-box">P / Esc</span><span>Pause</span></div>
-                        </div>
-                        <button className="btn-start" onClick={startGame}>DEPLOY BLOCKS</button>
-                        <div style={{ marginTop: '15px' }}>
-                            <button className="edition-btn" onClick={toggleFullscreen}>
-                                {isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN [F]'}
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Paused */}
-                {gameState === 'paused' && (
-                    <div className="overlay">
-                        <h2>PAUSED</h2>
-                        <p>Press ESC or P to resume</p>
-                        <button className="btn-start" onClick={() => {
-                            const game = gameRef.current
-                            game.running = true
-                            game.lastTime = performance.now()
-                            game.animationId = requestAnimationFrame(gameLoop)
-                            setGameState('playing')
-                        }}>RESUME</button>
-                    </div>
-                )}
-
-                {/* Game Over */}
-                {gameState === 'gameover' && (
-                    <div className="overlay gameover">
-                        <h2>SYSTEM CRASH</h2>
-                        <div className="final-stats">
-                            <div className="stat-row"><span>Score</span><span>{score.toLocaleString()}</span></div>
-                            <div className="stat-row"><span>Level</span><span>{level}</span></div>
-                            <div className="stat-row"><span>Lines</span><span>{lines}</span></div>
-                            <div className="stat-row"><span>Max Combo</span><span>x{combo}</span></div>
-                        </div>
-                        {score >= highScore && score > 0 && <p className="new-record">🏆 NEW HIGH SCORE!</p>}
-                        <button className="btn-start" onClick={startGame}>REBOOT SYSTEM</button>
-                    </div>
-                )}
-            </div>
+                <div className="controls-grid" style={{ marginTop: '14px' }}>
+                  <div className="control-row"><span className="k-box">← / →</span><span>Move</span></div>
+                  <div className="control-row"><span className="k-box">↑ / X</span><span>Rotate</span></div>
+                  <div className="control-row"><span className="k-box">SPACE</span><span>Hard Drop</span></div>
+                  <div className="control-row"><span className="k-box">C / SHIFT</span><span>Hold Piece</span></div>
+                  <div className="control-row"><span className="k-box">↓</span><span>Soft Drop</span></div>
+                  <div className="control-row"><span className="k-box">ESC</span><span>Pause</span></div>
+                </div>
+              </>
+            )}
+          </GameOverlay>
         </div>
-    )
+
+        {/* Right Side: Next Queue & Score */}
+        <div className="tetris-hud-panel">
+          <TetrisPiecePreview type={nextPiece} label="NEXT" />
+
+          <div className="tetris-stat-card">
+            <span className="tetris-stat-label">SCORE</span>
+            <span className="tetris-stat-value">{score}</span>
+          </div>
+
+          {combo > 1 && (
+            <div className="tetris-stat-card" style={{ borderColor: '#fbbf24' }}>
+              <span className="tetris-stat-label" style={{ color: '#fbbf24' }}>COMBO</span>
+              <span className="tetris-stat-value" style={{ color: '#fbbf24' }}>x{combo}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
